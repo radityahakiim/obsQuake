@@ -57,6 +57,8 @@ byte		*host_colormap;
 cvar_t	host_framerate = {"host_framerate","0"};	// set for slow motion
 cvar_t	host_speeds = {"host_speeds","0"};			// set for running times
 
+cvar_t fps_max = { "fps_max","0" }; // maximum frame per second (0 = unlimited)
+
 cvar_t	sys_ticrate = {"sys_ticrate","0.05"};
 cvar_t	serverprofile = {"serverprofile","0"};
 
@@ -212,6 +214,7 @@ void Host_InitLocal (void)
 	
 	Cvar_RegisterVariable (&host_framerate);
 	Cvar_RegisterVariable (&host_speeds);
+	Cvar_RegisterVariable (&fps_max);
 
 	Cvar_RegisterVariable (&sys_ticrate);
 	Cvar_RegisterVariable (&serverprofile);
@@ -420,7 +423,7 @@ void Host_ShutdownServer(qboolean crash)
 		CL_Disconnect ();
 
 // flush any pending messages - like the score!!!
-	start = Sys_FloatTime();
+	start = Sys_DoubleTime();
 	do
 	{
 		count = 0;
@@ -440,7 +443,7 @@ void Host_ShutdownServer(qboolean crash)
 				}
 			}
 		}
-		if ((Sys_FloatTime() - start) > 3.0)
+		if ((Sys_DoubleTime() - start) > 3.0)
 			break;
 	}
 	while (count);
@@ -502,8 +505,11 @@ qboolean Host_FilterTime (float time)
 {
 	realtime += time;
 
-	if (!cls.timedemo && realtime - oldrealtime < 1.0/72.0)
-		return false;		// framerate is too high
+	if (!cls.timedemo && fps_max.value > 0.0f) {
+		double max_frametime = 1.0 / fps_max.value;
+		if (realtime - oldrealtime < max_frametime)
+		return false;		// framerate is above max
+	}
 
 	host_frametime = realtime - oldrealtime;
 	oldrealtime = realtime;
@@ -580,14 +586,17 @@ void Host_ServerFrame (void)
 	SV_CheckForNewClients ();
 
 	temp_host_frametime = save_host_frametime = host_frametime;
-	while(temp_host_frametime > (1.0/72.0))
-	{
-		if (temp_host_frametime > 0.05)
-			host_frametime = 0.05;
-		else
-			host_frametime = temp_host_frametime;
-		temp_host_frametime -= host_frametime;
-		_Host_ServerFrame ();
+	if (fps_max.value > 0.0f) {
+		double max_frametime = 1.0 / fps_max.value;
+		while (temp_host_frametime > max_frametime)
+		{
+			if (temp_host_frametime > 0.05)
+				host_frametime = 0.05;
+			else
+				host_frametime = temp_host_frametime;
+			temp_host_frametime -= host_frametime;
+			_Host_ServerFrame();
+		}
 	}
 	host_frametime = save_host_frametime;
 
@@ -695,12 +704,12 @@ void _Host_Frame (float time)
 
 // update video
 	if (host_speeds.value)
-		time1 = Sys_FloatTime ();
+		time1 = Sys_DoubleTime ();
 		
 	SCR_UpdateScreen ();
 
 	if (host_speeds.value)
-		time2 = Sys_FloatTime ();
+		time2 = Sys_DoubleTime ();
 		
 // update audio
 	if (cls.signon == SIGNONS)
@@ -716,7 +725,7 @@ void _Host_Frame (float time)
 	if (host_speeds.value)
 	{
 		pass1 = (time1 - time3)*1000;
-		time3 = Sys_FloatTime ();
+		time3 = Sys_DoubleTime ();
 		pass2 = (time2 - time1)*1000;
 		pass3 = (time3 - time2)*1000;
 		Con_Printf ("%3i tot %3i server %3i gfx %3i snd\n",
@@ -739,9 +748,9 @@ void Host_Frame (float time)
 		return;
 	}
 	
-	time1 = Sys_FloatTime ();
+	time1 = Sys_DoubleTime ();
 	_Host_Frame (time);
-	time2 = Sys_FloatTime ();	
+	time2 = Sys_DoubleTime ();	
 	
 	timetotal += time2 - time1;
 	timecount++;
@@ -846,7 +855,7 @@ void Host_Init (quakeparms_t *parms)
 	host_parms = *parms;
 
 	if (parms->memsize < minimum_memory)
-		Sys_Error ("Only %4.1f megs of memory available, can't execute game", parms->memsize / (float)0x100000);
+	 	 Sys_Error ("Only %4.1f megs of memory available, can't execute game", parms->memsize / (float)0x100000);
 
 	com_argc = parms->argc;
 	com_argv = parms->argv;
