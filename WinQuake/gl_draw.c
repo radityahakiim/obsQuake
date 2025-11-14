@@ -1250,10 +1250,8 @@ int GL_LoadTexture (char *identifier, int width, int height, byte *data, qboolea
 			}
 		}
 	}
-	else {
-		glt = &gltextures[numgltextures];
-		numgltextures++;
-	}
+	glt = &gltextures[numgltextures];
+	numgltextures++;
 
 	strcpy (glt->identifier, identifier);
 	glt->texnum = texture_extension_number;
