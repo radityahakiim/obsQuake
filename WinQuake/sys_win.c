@@ -26,7 +26,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "conproc.h"
 
 #define MINIMUM_WIN_MEMORY		0x0880000
-#define MAXIMUM_WIN_MEMORY		0x1000000
+#define MAXIMUM_WIN_MEMORY		0x02000000  
 
 #define CONSOLE_ERROR_TIMEOUT	60.0	// # of seconds to wait on Sys_Error running
 										//  dedicated before exiting
@@ -265,7 +265,7 @@ void Sys_MakeCodeWriteable (unsigned long startaddr, unsigned long length)
 {
 	DWORD  flOldProtect;
 
-	if (!VirtualProtect((LPVOID)startaddr, length, PAGE_READWRITE, &flOldProtect))
+	if (!VirtualProtect((LPVOID)startaddr, length, PAGE_EXECUTE_READWRITE, &flOldProtect))
    		Sys_Error("Protection change failed\n");
 }
 
@@ -381,11 +381,11 @@ void Sys_Error (char *error, ...)
 		WriteFile (houtput, text4, strlen (text4), &dummy, NULL);
 
 
-		starttime = Sys_FloatTime ();
+		starttime = Sys_DoubleTime ();
 		sc_return_on_enter = true;	// so Enter will get us out of here
 
 		while (!Sys_ConsoleInput () &&
-				((Sys_FloatTime () - starttime) < CONSOLE_ERROR_TIMEOUT))
+				((Sys_DoubleTime () - starttime) < CONSOLE_ERROR_TIMEOUT))
 		{
 		}
 	}
@@ -461,68 +461,26 @@ void Sys_Quit (void)
 
 /*
 ================
-Sys_FloatTime
+Sys_DoubleTime
 ================
 */
-double Sys_FloatTime (void)
+double Sys_DoubleTime (void)
 {
-	static int			sametimecount;
-	static unsigned int	oldtime;
-	static int			first = 1;
-	LARGE_INTEGER		PerformanceCount;
-	unsigned int		temp, t2;
-	double				time;
+	static LARGE_INTEGER freq;
+	static LARGE_INTEGER start;
+	static qboolean init = FALSE;
+	LARGE_INTEGER now;
 
-	Sys_PushFPCW_SetHigh ();
-
-	QueryPerformanceCounter (&PerformanceCount);
-
-	temp = ((unsigned int)PerformanceCount.LowPart >> lowshift) |
-		   ((unsigned int)PerformanceCount.HighPart << (32 - lowshift));
-
-	if (first)
+	if (!init)
 	{
-		oldtime = temp;
-		first = 0;
+		if (!QueryPerformanceFrequency(&freq))
+			Sys_Error("No high-resolution performance counter available");
+		QueryPerformanceCounter(&start);
+		init = TRUE;
+		return 0.0;
 	}
-	else
-	{
-	// check for turnover or backward time
-		if ((temp <= oldtime) && ((oldtime - temp) < 0x10000000))
-		{
-			oldtime = temp;	// so we can't get stuck
-		}
-		else
-		{
-			t2 = temp - oldtime;
-
-			time = (double)t2 * pfreq;
-			oldtime = temp;
-
-			curtime += time;
-
-			if (curtime == lastcurtime)
-			{
-				sametimecount++;
-
-				if (sametimecount > 100000)
-				{
-					curtime += 1.0;
-					sametimecount = 0;
-				}
-			}
-			else
-			{
-				sametimecount = 0;
-			}
-
-			lastcurtime = curtime;
-		}
-	}
-
-	Sys_PopFPCW ();
-
-    return curtime;
+	QueryPerformanceCounter(&now);
+	return (double)(now.QuadPart - start.QuadPart) / (double)freq.QuadPart;
 }
 
 
@@ -535,7 +493,7 @@ void Sys_InitFloatTime (void)
 {
 	int		j;
 
-	Sys_FloatTime ();
+	Sys_DoubleTime ();
 
 	j = COM_CheckParm("-starttime");
 
@@ -556,7 +514,7 @@ char *Sys_ConsoleInput (void)
 {
 	static char	text[256];
 	static int		len;
-	INPUT_RECORD	recs[1024];
+	static INPUT_RECORD	recs[1024];
 	int		count;
 	int		i, dummy;
 	int		ch, numread, numevents;
@@ -694,7 +652,7 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
     MSG				msg;
 	quakeparms_t	parms;
 	double			time, oldtime, newtime;
-	MEMORYSTATUS	lpBuffer;
+	MEMORYSTATUSEX	lpBuffer;
 	static	char	cwd[1024];
 	int				t;
 	RECT			rect;
@@ -707,7 +665,7 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	global_nCmdShow = nCmdShow;
 
 	lpBuffer.dwLength = sizeof(MEMORYSTATUS);
-	GlobalMemoryStatus (&lpBuffer);
+	GlobalMemoryStatusEx (&lpBuffer);
 
 	if (!GetCurrentDirectory (sizeof(cwd), cwd))
 		Sys_Error ("Couldn't determine current directory");
@@ -778,13 +736,13 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 // take the greater of all the available memory or half the total memory,
 // but at least 8 Mb and no more than 16 Mb, unless they explicitly
 // request otherwise
-	parms.memsize = lpBuffer.dwAvailPhys;
+	parms.memsize = lpBuffer.ullAvailPhys;
 
 	if (parms.memsize < MINIMUM_WIN_MEMORY)
 		parms.memsize = MINIMUM_WIN_MEMORY;
 
-	if (parms.memsize < (lpBuffer.dwTotalPhys >> 1))
-		parms.memsize = lpBuffer.dwTotalPhys >> 1;
+	if (parms.memsize < (lpBuffer.ullTotalPhys >> 1))
+		parms.memsize = lpBuffer.ullTotalPhys >> 1;
 
 	if (parms.memsize > MAXIMUM_WIN_MEMORY)
 		parms.memsize = MAXIMUM_WIN_MEMORY;
@@ -849,20 +807,20 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	Sys_Printf ("Host_Init\n");
 	Host_Init (&parms);
 
-	oldtime = Sys_FloatTime ();
+	oldtime = Sys_DoubleTime ();
 
     /* main window message loop */
 	while (1)
 	{
 		if (isDedicated)
 		{
-			newtime = Sys_FloatTime ();
+			newtime = Sys_DoubleTime ();
 			time = newtime - oldtime;
 
 			while (time < sys_ticrate.value )
 			{
 				Sys_Sleep();
-				newtime = Sys_FloatTime ();
+				newtime = Sys_DoubleTime ();
 				time = newtime - oldtime;
 			}
 		}
@@ -879,7 +837,7 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 				SleepUntilInput (NOT_FOCUS_SLEEP);
 			}
 
-			newtime = Sys_FloatTime ();
+			newtime = Sys_DoubleTime ();
 			time = newtime - oldtime;
 		}
 
