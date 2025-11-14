@@ -635,7 +635,6 @@ void Con_NotifyBox (char *text)
 
 	do
 	{
-		Sleep(0);
 		t1 = Sys_DoubleTime ();
 		SCR_UpdateScreen ();
 		Sys_SendKeyEvents ();
