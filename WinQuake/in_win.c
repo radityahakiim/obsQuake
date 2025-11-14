@@ -39,6 +39,12 @@ int			mouse_oldbuttonstate;
 POINT		current_pos;
 int			mouse_x, mouse_y, old_mouse_x, old_mouse_y, mx_accum, my_accum;
 
+// Raw mouse input support
+static volatile LONG raw_mouse_dx = 0;
+static volatile LONG raw_mouse_dy = 0;
+static volatile LONG raw_mouse_buttons = 0;
+static qboolean use_rawinput = false;
+
 static qboolean	restore_spi;
 static int		originalmouseparms[3], newmouseparms[3] = {0, 0, 1};
 
@@ -154,7 +160,6 @@ void IN_StartupJoystick (void);
 void Joy_AdvancedUpdate_f (void);
 void IN_JoyMove (usercmd_t *cmd);
 
-
 /*
 ===========
 Force_CenterView_f
@@ -165,6 +170,84 @@ void Force_CenterView_f (void)
 	cl.viewangles[PITCH] = 0;
 }
 
+/*
+===========
+IN_RegisterRawInput
+===========
+*/
+static void IN_RegisterRawInput(void) {
+	RAWINPUTDEVICE rid;
+	// mouse located in page 1 usage 2
+	rid.usUsagePage = 0x01;
+	rid.usUsage = 0x02;
+	rid.hwndTarget = NULL; // focused window
+
+	if (RegisterRawInputDevices(&rid, 1, sizeof(rid))) {
+		use_rawinput = true;
+		Con_SafePrintF("Raw Input mouse registered\n");
+	}
+	else {
+		use_rawinput = false;
+		Con_SafePrintF("Raw Input registration failed\n");
+	}
+}
+
+/*
+===========
+IN_ProcessRawInput
+===========
+*/
+void IN_ProcessRawInput(HRAWINPUT hRaw) {
+	UINT cbSize = 0;
+	if (GetRawInputData(hRaw, RID_INPUT, NULL, &cbSize, sizeof(RAWINPUTHEADER)) != 0)
+		return;
+	if (cbSize == 0) return;
+	LPBYTE lpb = (LPBYTE)malloc(cbSize);
+	if (!lpb) return;
+	if (GetRawInputData(hRaw, RID_INPUT, lpb, &cbSize, sizeof(RAWINPUTHEADER)) == (UINT)-1) {
+		free(lpb);
+		return;
+	}
+	RAWINPUT* raw = (RAWINPUT*)lpb;
+	if (raw->header.dwType == RIM_TYPEMOUSE) {
+		if (raw->data.mouse.usFlags & MOUSE_MOVE_ABSOLUTE) {
+			free(lpb);
+			return;
+		}
+		LONG dx = raw->data.mouse.lLastX;
+		LONG dy = raw->data.mouse.lLastY;
+		// accumulate deltas atomically
+		InterlockedExchangeAdd(&raw_mouse_dx, dx);
+		InterlockedExchangeAdd(&raw_mouse_dy, dy);
+		// button flags mapping
+		WORD flags = raw->data.mouse.usButtonFlags;
+		if (flags & RI_MOUSE_LEFT_BUTTON_DOWN) InterlockedOr(&raw_mouse_buttons, 1);
+		if (flags & RI_MOUSE_LEFT_BUTTON_UP)   InterlockedAnd(&raw_mouse_buttons, ~1);
+		if (flags & RI_MOUSE_RIGHT_BUTTON_DOWN) InterlockedOr(&raw_mouse_buttons, 1<<1);
+		if (flags & RI_MOUSE_RIGHT_BUTTON_UP)   InterlockedAnd(&raw_mouse_buttons, ~(1 << 1));
+		if (flags & RI_MOUSE_MIDDLE_BUTTON_DOWN) InterlockedOr(&raw_mouse_buttons, 1 << 2);
+		if (flags & RI_MOUSE_MIDDLE_BUTTON_UP)   InterlockedAnd(&raw_mouse_buttons, ~(1 << 2));
+
+		// wheel handling
+		if (flags & RI_MOUSE_WHEEL) {
+			SHORT wheel = (SHORT)raw->data.mouse.usButtonData;
+			int steps = wheel / WHEEL_DELTA;
+			if (steps > 0) {
+				for (int s = 0; s < steps; ++s) {
+					Key_Event(K_MWHEELUP, true);
+					Key_Event(K_MWHEELUP, false);
+				}
+			}
+			else if (wheel < 0) {
+				for (int s = 0; s < -steps; ++s) {
+					Key_Event(K_MWHEELDOWN, true);
+					Key_Event(K_MWHEELDOWN, false);
+				}
+			}
+		}
+	}
+	free(lpb);
+}
 
 /*
 ===========
@@ -580,7 +663,8 @@ IN_MouseMove
 */
 void IN_MouseMove (usercmd_t *cmd)
 {
-	int					mx, my;
+	int					mx_local = 0, my_local = 0;
+	int					mx = 0, my = 0;
 	HDC					hdc;
 	int					i;
 	DIDEVICEOBJECTDATA	od;
@@ -667,14 +751,44 @@ void IN_MouseMove (usercmd_t *cmd)
 		}	
 			
 		mouse_oldbuttonstate = mstate_di;
+
+		// assign into mx_local/my_local for downstream processing
+		mx_local = mx;
+		my_local = my;
 	}
 	else
 	{
-		GetCursorPos (&current_pos);
-		mx = current_pos.x - window_center_x + mx_accum;
-		my = current_pos.y - window_center_y + my_accum;
-		mx_accum = 0;
-		my_accum = 0;
+		if (use_rawinput) {
+			// Atomically read and clear accumulated deltas
+			mx_local = (int)InterlockedExchange(&raw_mouse_dx, 0);
+			my_local = (int)InterlockedExchange(&raw_mouse_dy, 0);
+
+			// add any leftover accumulators as fallback
+			mx_local += mx_accum;
+			my_local += my_accum;
+			mx_accum = my_accum = 0;
+
+			// Update buttons state from raw_mouse_button atomically
+			int rawbtns = (int)InterlockedExchange(&raw_mouse_buttons, 0);
+			// map rawbtns -> generate Key_Event transitions
+			for (int i = 0; i < mouse_buttons; ++i) {
+				int mask = 1 << i;
+				qboolean isDown = (rawbtns & mask) != 0;
+				qboolean wasDown = (mouse_oldbuttonstate & mask) != 0;
+				if (isDown && !wasDown) Key_Event(K_MOUSE1 + i, true);
+				if (!isDown && wasDown) Key_Event(K_MOUSE1 + i, false);
+			}
+			mouse_oldbuttonstate = rawbtns;
+		}
+		else {
+			GetCursorPos(&current_pos);
+			mx = current_pos.x - window_center_x + mx_accum;
+			my = current_pos.y - window_center_y + my_accum;
+			mx_accum = 0;
+			my_accum = 0;
+			mx_local = mx;
+			my_local = my;
+		}
 	}
 
 //if (mx ||  my)
@@ -682,22 +796,23 @@ void IN_MouseMove (usercmd_t *cmd)
 
 	if (m_filter.value)
 	{
-		mouse_x = (mx + old_mouse_x) * 0.5;
-		mouse_y = (my + old_mouse_y) * 0.5;
+		mouse_x = (mx_local + old_mouse_x) * 0.5;
+		mouse_y = (my_local + old_mouse_y) * 0.5;
 	}
 	else
 	{
-		mouse_x = mx;
-		mouse_y = my;
+		mouse_x = mx_local;
+		mouse_y = my_local;
 	}
 
-	old_mouse_x = mx;
-	old_mouse_y = my;
+	old_mouse_x = mx_local;
+	old_mouse_y = my_local;
 
 	mouse_x *= sensitivity.value;
 	mouse_y *= sensitivity.value;
 
 // add mouse X/Y movement to cmd
+	in_mlook.state = 1; // set mouselook as default
 	if ( (in_strafe.state & 1) || (lookstrafe.value && (in_mlook.state & 1) ))
 		cmd->sidemove += m_side.value * mouse_x;
 	else
@@ -722,8 +837,8 @@ void IN_MouseMove (usercmd_t *cmd)
 			cmd->forwardmove -= m_forward.value * mouse_y;
 	}
 
-// if the mouse has moved, force it to the center, so there's room to move
-	if (mx || my)
+// do NOT warp the cursor when using raw input
+	if (!use_rawinput && (mx_local || my_local))
 	{
 		SetCursorPos (window_center_x, window_center_y);
 	}
@@ -758,13 +873,11 @@ void IN_Accumulate (void)
 
 	if (mouseactive)
 	{
-		if (!dinput)
+		if (!dinput && !use_rawinput)
 		{
 			GetCursorPos (&current_pos);
-
 			mx_accum += current_pos.x - window_center_x;
 			my_accum += current_pos.y - window_center_y;
-
 		// force the mouse to the center, so there's room to move
 			SetCursorPos (window_center_x, window_center_y);
 		}
