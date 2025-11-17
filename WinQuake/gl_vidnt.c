@@ -105,8 +105,6 @@ glvert_t glv;
 
 cvar_t	gl_ztrick = { "gl_ztrick","1" };
 
-HWND WINAPI InitializeWindow(HINSTANCE hInstance, int nCmdShow);
-
 viddef_t	vid;				// global video state
 
 unsigned short	d_8to16table[256];
