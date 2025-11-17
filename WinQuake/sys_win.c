@@ -25,9 +25,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "resource.h"
 #include "conproc.h"
 
-#define MINIMUM_WIN_MEMORY		0x0880000
-#define MAXIMUM_WIN_MEMORY		0x02000000  
-
 #define CONSOLE_ERROR_TIMEOUT	60.0	// # of seconds to wait on Sys_Error running
 										//  dedicated before exiting
 #define PAUSE_SLEEP		50				// sleep time on pause or minimization
@@ -736,16 +733,7 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 // take the greater of all the available memory or half the total memory,
 // but at least 8 Mb and no more than 16 Mb, unless they explicitly
 // request otherwise
-	parms.memsize = lpBuffer.ullAvailPhys;
-
-	if (parms.memsize < MINIMUM_WIN_MEMORY)
-		parms.memsize = MINIMUM_WIN_MEMORY;
-
-	if (parms.memsize < (lpBuffer.ullTotalPhys >> 1))
-		parms.memsize = lpBuffer.ullTotalPhys >> 1;
-
-	if (parms.memsize > MAXIMUM_WIN_MEMORY)
-		parms.memsize = MAXIMUM_WIN_MEMORY;
+	parms.memsize = 64 * 1024 * 1024;
 
 	if (COM_CheckParm ("-heapsize"))
 	{
