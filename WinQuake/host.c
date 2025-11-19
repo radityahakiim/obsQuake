@@ -83,6 +83,8 @@ cvar_t	pausable = {"pausable","1"};
 
 cvar_t	temp1 = {"temp1","0"};
 
+cvar_t	sv_physrate = { "sv_physrate", "72" };
+static double physics_accumulator = 0.0;
 
 /*
 ================
@@ -232,6 +234,7 @@ void Host_InitLocal (void)
 	Cvar_RegisterVariable (&pausable);
 
 	Cvar_RegisterVariable (&temp1);
+	Cvar_RegisterVariable (&sv_physrate);
 
 	Host_FindMaxClients ();
 	
@@ -608,6 +611,9 @@ void Host_ServerFrame (void)
 
 void Host_ServerFrame (void)
 {
+// keep a copy of real frame delta for rendering/orther systems
+	double orig_host_frametime = host_frametime;
+
 // run the world state	
 	pr_global_struct->frametime = host_frametime;
 
@@ -620,10 +626,39 @@ void Host_ServerFrame (void)
 // read client messages
 	SV_RunClients ();
 	
-// move things around and think
-// always pause in single player if in console or menus
-	if (!sv.paused && (svs.maxclients > 1 || key_dest == key_game) )
-		SV_Physics ();
+// accumulate elapsed real time into physics_accumulator and run SV_Physics()
+	double physics_dt = sv_physrate.value > 0.0 ? (1.0 / sv_physrate.value) : (1.0 / 72.0);
+	int max_steps = 8;
+	int steps = 0;
+
+	physics_accumulator += orig_host_frametime;
+
+	// clamp accumulated time to a reasonable max to avoid long catch-up loops
+	if (physics_accumulator > 0.25)
+		physics_accumulator = 0.25;
+
+	while (physics_accumulator >= physics_dt && steps < max_steps) {
+		// set host_frametime for physics to the fixed step
+		host_frametime = physics_dt;
+		pr_global_struct->frametime = host_frametime;
+
+		// move things around and think
+		// always pause in single player if in console or menus
+		if (!sv.paused && (svs.maxclients > 1 || key_dest == key_game))
+			SV_Physics();
+		physics_accumulator -= physics_dt;
+		steps++;
+	}
+	
+	// warn if hit max steps
+	if (steps == max_steps && physics_accumulator >= physics_dt)
+	{
+		Con_Printf("Host_ServerFrame: physics falling behind, dropping excess time\n");
+		physics_accumulator = 0.0;
+	}
+
+	host_frametime = orig_host_frametime;
+	pr_global_struct->frametime = host_frametime;
 
 // send all messages to the clients
 	SV_SendClientMessages ();
