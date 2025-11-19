@@ -124,6 +124,7 @@ char* VID_GetModeDescription(int mode);
 void ClearAllStates(void);
 void VID_UpdateWindowStatus(void);
 void GL_Init(void);
+void Sys_RestartWithMode(int modnum);
 
 PROC glArrayElementEXT;
 PROC glColorPointerEXT;
@@ -1827,7 +1828,9 @@ void VID_MenuDraw(void)
 			if (modedescs[i].iscur)
 				M_PrintWhite(column, row, modedescs[i].desc);
 			else
-				M_Print(column, row, modedescs[i].desc);
+				M_Print(column, row, modedescs[i].desc);\
+				if (i == vid_line)
+					M_DrawCharacter(column - 8, row, 12 + ((int)(realtime * 4) & 1));
 
 			column += 13 * 8;
 
@@ -1840,13 +1843,13 @@ void VID_MenuDraw(void)
 	}
 
 	M_Print(3 * 8, 36 + MODE_AREA_HEIGHT * 8 + 8 * 2,
-		"Video modes must be set from the");
+		"Video modes can be set in here.");
 	M_Print(3 * 8, 36 + MODE_AREA_HEIGHT * 8 + 8 * 3,
-		"command line with -width <width>");
+		"Make sure you save the game");
 	M_Print(3 * 8, 36 + MODE_AREA_HEIGHT * 8 + 8 * 4,
-		"and -bpp <bits-per-pixel>");
+		"before changing the game resolution.");
 	M_Print(3 * 8, 36 + MODE_AREA_HEIGHT * 8 + 8 * 6,
-		"Select windowed mode with -window");
+		"The game restarts itself every mode change.");
 }
 
 
@@ -1857,13 +1860,55 @@ VID_MenuKey
 */
 void VID_MenuKey(int key)
 {
+	int ln = vid_wmodes;
 	switch (key)
 	{
 	case K_ESCAPE:
 		S_LocalSound("misc/menu1.wav");
 		M_Menu_Options_f();
 		break;
+	case K_LEFTARROW:
+		S_LocalSound("misc/menu1.wav");
+		vid_line--;
+		if (vid_line < 0) vid_line = ln - 1;
+		break;
+	case K_RIGHTARROW:
+		S_LocalSound("misc/menu1.wav");
+		vid_line++;
+		if (vid_line >= ln) vid_line = 0;
+		break;
+	case K_UPARROW:
+		S_LocalSound("misc/menu1.wav");
+		vid_line -= VID_ROW_SIZE;
+		if (vid_line < 0)
+			vid_line = (((ln - 1) / VID_ROW_SIZE) * VID_ROW_SIZE) + (vid_line + VID_ROW_SIZE);
+		if (vid_line >= ln) vid_line = ln - 1;
+		break;
+	case K_DOWNARROW:
+		S_LocalSound("misc/menu1.wav");
+		vid_line += VID_ROW_SIZE;
+		if (vid_line >= ln) vid_line = vid_line % VID_ROW_SIZE;
+		if (vid_line >= ln) vid_line = ln - 1;
+		break;
+	case K_ENTER:
+	{
+		// apply selected mode and restart with -mode <modenum>
+		int sel = modedescs[vid_line].modenum;
+		if (sel <= 0) break;
 
+		S_LocalSound("misc/menu2.wav");
+
+		// set cvar so config reflects selection
+		Cvar_SetValue("vid_mode", (float)sel);
+
+		// ask command buffer to set vid_mode (keep behaviour consistent)
+		Cbuf_AddText(va("vid_mode %d\n", sel));
+
+		// restart the game to apply settings
+		Con_SafePrintf("Restarting to apply video mode %s ...\n", VID_GetModeDescription(sel));
+		Sys_RestartWithMode(sel);
+		break;
+	}
 	default:
 		break;
 	}

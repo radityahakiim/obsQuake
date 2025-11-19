@@ -56,6 +56,45 @@ void Sys_PopFPCW (void);
 
 volatile int					sys_checksum;
 
+/*
+================
+Sys_RestartWithMode
+================
+*/
+void Sys_RestartWithMode(int modenum)
+{
+	char exePath[MAX_PATH];
+	char cmdline[1024];
+	STARTUPINFOA si;
+	PROCESS_INFORMATION pi;
+
+	// get path to the running executable
+	if (!GetModuleFileNameA(NULL, exePath, sizeof(exePath)))
+	{
+		MessageBoxA(NULL, "Failed to get executable path for restart", "Error", MB_OK | MB_ICONERROR);
+		return;
+	}
+	snprintf(cmdline, sizeof(cmdline), "\"%s\" -mode %d", exePath, modenum);
+
+	ZeroMemory(&si, sizeof(si));
+	si.cb = sizeof(si);
+	ZeroMemory(&pi, sizeof(pi));
+
+	if (!CreateProcessA(NULL, cmdline, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi))
+	{
+		MessageBoxA(NULL, "Failed to restart Quake with new video mode", "Error", MB_OK | MB_ICONERROR);
+		return;
+	}
+
+	// close handles from created process
+	CloseHandle(pi.hThread);
+	CloseHandle(pi.hProcess);
+
+	// Clean shutdown current instance and exit
+	Host_Shutdown();
+	exit(0);
+}
+
 
 /*
 ================
