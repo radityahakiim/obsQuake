@@ -1,0 +1,10 @@
+﻿################################################################################
+# This .gitignore file was automatically created by Microsoft(R) Visual Studio.
+################################################################################
+
+/WinQuake/Debug
+/WinQuake/.vs/WinQuake
+/WinQuake/debug_gl
+/WinQuake/gas2masm/Debug
+/WinQuake/WinQuake.vcxproj.user
+/WinQuake/gas2masm/gas2masm.vcxproj.user
