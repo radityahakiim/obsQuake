@@ -1386,7 +1386,7 @@ void VID_InitFullDIB(HINSTANCE hInstance)
 	// Use enum, remove some obsolete loops for scanning video modes (get rid stuttering effect at start)
 	while (EnumDisplaySettingsEx(NULL, modenum, &devmode, 0))
 	{
-		if (devmode.dmBitsPerPel >= 15 &&
+		if (devmode.dmBitsPerPel >= 32 &&
 			(devmode.dmPelsWidth <= MAXWIDTH) &&
 			(devmode.dmPelsHeight <= MAXHEIGHT))
 		{
