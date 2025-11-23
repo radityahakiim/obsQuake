@@ -20,16 +20,13 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // in_win.c -- windows 95 mouse and joystick code
 // 02/21/97 JCB Added extended DirectInput code to support external controllers.
 
-#include <dinput.h>
+#include <SDL.h>
 #include "quakedef.h"
 #include "winquake.h"
 #include "dosisms.h"
 
 #define DINPUT_BUFFERSIZE           16
 #define iDirectInputCreate(a,b,c,d)	pDirectInputCreate(a,b,c,d)
-
-HRESULT (WINAPI *pDirectInputCreate)(HINSTANCE hinst, DWORD dwVersion,
-	LPDIRECTINPUT * lplpDirectInput, LPUNKNOWN punkOuter);
 
 // mouse variables
 cvar_t	m_filter = {"m_filter","0"};
@@ -115,8 +112,8 @@ int			joy_id;
 DWORD		joy_flags;
 DWORD		joy_numbuttons;
 
-static LPDIRECTINPUT		g_pdi;
-static LPDIRECTINPUTDEVICE	g_pMouse;
+// static LPDIRECTINPUT		g_pdi;
+// static LPDIRECTINPUTDEVICE	g_pMouse;
 
 static JOYINFOEX	ji;
 
@@ -134,27 +131,8 @@ typedef struct MYDATA {
 	BYTE  bButtonD;             // Another button goes here
 } MYDATA;
 
-static DIOBJECTDATAFORMAT rgodf[] = {
-  { &GUID_XAxis,    FIELD_OFFSET(MYDATA, lX),       DIDFT_AXIS | DIDFT_ANYINSTANCE,   0,},
-  { &GUID_YAxis,    FIELD_OFFSET(MYDATA, lY),       DIDFT_AXIS | DIDFT_ANYINSTANCE,   0,},
-  { &GUID_ZAxis,    FIELD_OFFSET(MYDATA, lZ),       0x80000000 | DIDFT_AXIS | DIDFT_ANYINSTANCE,   0,},
-  { 0,              FIELD_OFFSET(MYDATA, bButtonA), DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0,},
-  { 0,              FIELD_OFFSET(MYDATA, bButtonB), DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0,},
-  { 0,              FIELD_OFFSET(MYDATA, bButtonC), 0x80000000 | DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0,},
-  { 0,              FIELD_OFFSET(MYDATA, bButtonD), 0x80000000 | DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0,},
-};
-
-#define NUM_OBJECTS (sizeof(rgodf) / sizeof(rgodf[0]))
-
-static DIDATAFORMAT	df = {
-	sizeof(DIDATAFORMAT),       // this structure
-	sizeof(DIOBJECTDATAFORMAT), // size of object data format
-	DIDF_RELAXIS,               // absolute axis coordinates
-	sizeof(MYDATA),             // device data size
-	NUM_OBJECTS,                // number of objects
-	rgodf,                      // and here they are
-};
-
+// SDL stuffs
+extern SDL_Window* window;
 // forward-referenced functions
 void IN_StartupJoystick (void);
 void Joy_AdvancedUpdate_f (void);
@@ -190,63 +168,6 @@ static void IN_RegisterRawInput(void) {
 		use_rawinput = false;
 		Con_SafePrintF("Raw Input registration failed\n");
 	}
-}
-
-/*
-===========
-IN_ProcessRawInput
-===========
-*/
-void IN_ProcessRawInput(HRAWINPUT hRaw) {
-	UINT cbSize = 0;
-	if (GetRawInputData(hRaw, RID_INPUT, NULL, &cbSize, sizeof(RAWINPUTHEADER)) != 0)
-		return;
-	if (cbSize == 0) return;
-	LPBYTE lpb = (LPBYTE)malloc(cbSize);
-	if (!lpb) return;
-	if (GetRawInputData(hRaw, RID_INPUT, lpb, &cbSize, sizeof(RAWINPUTHEADER)) == (UINT)-1) {
-		free(lpb);
-		return;
-	}
-	RAWINPUT* raw = (RAWINPUT*)lpb;
-	if (raw->header.dwType == RIM_TYPEMOUSE) {
-		if (raw->data.mouse.usFlags & MOUSE_MOVE_ABSOLUTE) {
-			free(lpb);
-			return;
-		}
-		LONG dx = raw->data.mouse.lLastX;
-		LONG dy = raw->data.mouse.lLastY;
-		// accumulate deltas atomically
-		InterlockedExchangeAdd(&raw_mouse_dx, dx);
-		InterlockedExchangeAdd(&raw_mouse_dy, dy);
-		// button flags mapping
-		WORD flags = raw->data.mouse.usButtonFlags;
-		if (flags & RI_MOUSE_LEFT_BUTTON_DOWN) InterlockedOr(&raw_mouse_buttons, 1);
-		if (flags & RI_MOUSE_LEFT_BUTTON_UP)   InterlockedAnd(&raw_mouse_buttons, ~1);
-		if (flags & RI_MOUSE_RIGHT_BUTTON_DOWN) InterlockedOr(&raw_mouse_buttons, 1<<1);
-		if (flags & RI_MOUSE_RIGHT_BUTTON_UP)   InterlockedAnd(&raw_mouse_buttons, ~(1 << 1));
-		if (flags & RI_MOUSE_MIDDLE_BUTTON_DOWN) InterlockedOr(&raw_mouse_buttons, 1 << 2);
-		if (flags & RI_MOUSE_MIDDLE_BUTTON_UP)   InterlockedAnd(&raw_mouse_buttons, ~(1 << 2));
-
-		// wheel handling
-		if (flags & RI_MOUSE_WHEEL) {
-			SHORT wheel = (SHORT)raw->data.mouse.usButtonData;
-			int steps = wheel / WHEEL_DELTA;
-			if (steps > 0) {
-				for (int s = 0; s < steps; ++s) {
-					Key_Event(K_MWHEELUP, true);
-					Key_Event(K_MWHEELUP, false);
-				}
-			}
-			else if (wheel < 0) {
-				for (int s = 0; s < -steps; ++s) {
-					Key_Event(K_MWHEELDOWN, true);
-					Key_Event(K_MWHEELDOWN, false);
-				}
-			}
-		}
-	}
-	free(lpb);
 }
 
 /*
@@ -303,38 +224,24 @@ IN_ActivateMouse
 */
 void IN_ActivateMouse (void)
 {
-
 	mouseactivatetoggle = true;
 
-	if (mouseinitialized)
+	if (!mouseinitialized)
+		return;
+
+	if (SDL_SetRelativeMouseMode(SDL_TRUE) == 0)
 	{
-		if (dinput)
-		{
-			if (g_pMouse)
-			{
-				if (!dinput_acquired)
-				{
-					IDirectInputDevice_Acquire(g_pMouse);
-					dinput_acquired = true;
-				}
-			}
-			else
-			{
-				return;
-			}
-		}
-		else
-		{
-			if (mouseparmsvalid)
-				restore_spi = SystemParametersInfo (SPI_SETMOUSE, 0, newmouseparms, 0);
+		SDL_SetWindowGrab(window, SDL_TRUE);
+		SDL_ShowCursor(SDL_DISABLE);
 
-			SetCursorPos (window_center_x, window_center_y);
-			SetCapture (mainwindow);
-			ClipCursor (&window_rect);
-		}
-
-		mouseactive = true;
+		Con_SafePrintf("Mouse activated (SDL relative mode)\n");
 	}
+	else
+	{
+		Con_SafePrintf("Failed to enable SDL mouse relative mode\n");
+		return;
+	}
+	mouseactive = true;
 }
 
 
@@ -360,30 +267,16 @@ void IN_DeactivateMouse (void)
 
 	mouseactivatetoggle = false;
 
-	if (mouseinitialized)
-	{
-		if (dinput)
-		{
-			if (g_pMouse)
-			{
-				if (dinput_acquired)
-				{
-					IDirectInputDevice_Unacquire(g_pMouse);
-					dinput_acquired = false;
-				}
-			}
-		}
-		else
-		{
-			if (restore_spi)
-				SystemParametersInfo (SPI_SETMOUSE, 0, originalmouseparms, 0);
+	if (!mouseinitialized)
+		return;
 
-			ClipCursor (NULL);
-			ReleaseCapture ();
-		}
+	// disable relative (captured) mouse input
+	SDL_SetRelativeMouseMode(SDL_FALSE);
 
-		mouseactive = false;
-	}
+	SDL_SetWindowGrab(window, SDL_FALSE);
+	SDL_ShowCursor(SDL_ENABLE);
+
+	mouseactive = false;
 }
 
 
@@ -406,98 +299,6 @@ void IN_RestoreOriginalMouseState (void)
 	ShowCursor (FALSE);
 }
 
-
-/*
-===========
-IN_InitDInput
-===========
-*/
-qboolean IN_InitDInput (void)
-{
-    HRESULT		hr;
-	DIPROPDWORD	dipdw = {
-		{
-			sizeof(DIPROPDWORD),        // diph.dwSize
-			sizeof(DIPROPHEADER),       // diph.dwHeaderSize
-			0,                          // diph.dwObj
-			DIPH_DEVICE,                // diph.dwHow
-		},
-		DINPUT_BUFFERSIZE,              // dwData
-	};
-
-	if (!hInstDI)
-	{
-		hInstDI = LoadLibrary("dinput.dll");
-		
-		if (hInstDI == NULL)
-		{
-			Con_SafePrintf ("Couldn't load dinput.dll\n");
-			return false;
-		}
-	}
-
-	if (!pDirectInputCreate)
-	{
-		pDirectInputCreate = (void *)GetProcAddress(hInstDI,"DirectInputCreateA");
-
-		if (!pDirectInputCreate)
-		{
-			Con_SafePrintf ("Couldn't get DI proc addr\n");
-			return false;
-		}
-	}
-
-// register with DirectInput and get an IDirectInput to play with.
-	hr = iDirectInputCreate(global_hInstance, DIRECTINPUT_VERSION, &g_pdi, NULL);
-
-	if (FAILED(hr))
-	{
-		return false;
-	}
-
-// obtain an interface to the system mouse device.
-	hr = IDirectInput_CreateDevice(g_pdi, &GUID_SysMouse, &g_pMouse, NULL);
-
-	if (FAILED(hr))
-	{
-		Con_SafePrintf ("Couldn't open DI mouse device\n");
-		return false;
-	}
-
-// set the data format to "mouse format".
-	hr = IDirectInputDevice_SetDataFormat(g_pMouse, &df);
-
-	if (FAILED(hr))
-	{
-		Con_SafePrintf ("Couldn't set DI mouse format\n");
-		return false;
-	}
-
-// set the cooperativity level.
-	hr = IDirectInputDevice_SetCooperativeLevel(g_pMouse, mainwindow,
-			DISCL_EXCLUSIVE | DISCL_FOREGROUND);
-
-	if (FAILED(hr))
-	{
-		Con_SafePrintf ("Couldn't set DI coop level\n");
-		return false;
-	}
-
-
-// set the buffer size to DINPUT_BUFFERSIZE elements.
-// the buffer size is a DWORD property associated with the device
-	hr = IDirectInputDevice_SetProperty(g_pMouse, DIPROP_BUFFERSIZE, &dipdw.diph);
-
-	if (FAILED(hr))
-	{
-		Con_SafePrintf ("Couldn't set DI buffersize\n");
-		return false;
-	}
-
-	return true;
-}
-
-
 /*
 ===========
 IN_StartupMouse
@@ -505,52 +306,25 @@ IN_StartupMouse
 */
 void IN_StartupMouse (void)
 {
-	HDC			hdc;
-
 	if ( COM_CheckParm ("-nomouse") ) 
 		return; 
 
 	mouseinitialized = true;
 
-	if (COM_CheckParm ("-dinput"))
+	// SDL doesn't use Windows acceleration settings but we can emulate options
+	if (COM_CheckParm("-noforcemspd") || COM_CheckParm("-noforcemaccel") || COM_CheckParm("-noforcemparms"))
 	{
-		dinput = IN_InitDInput ();
-
-		if (dinput)
-		{
-			Con_SafePrintf ("DirectInput initialized\n");
-		}
-		else
-		{
-			Con_SafePrintf ("DirectInput not initialized\n");
-		}
+		SDL_SetHint(SDL_HINT_MOUSE_RELATIVE_MODE_WARP, "0"); // disable warp if overriden
 	}
 
-	if (!dinput)
-	{
-		mouseparmsvalid = SystemParametersInfo (SPI_GETMOUSE, 0, originalmouseparms, 0);
+	// enable raw mouse motion if supported
 
-		if (mouseparmsvalid)
-		{
-			if ( COM_CheckParm ("-noforcemspd") ) 
-				newmouseparms[2] = originalmouseparms[2];
+		// if using raw input specifically
+		SDL_SetHint(SDL_HINT_MOUSE_RELATIVE_MODE_WARP, "0");
+		SDL_SetHint(SDL_HINT_MOUSE_RELATIVE_SPEED_SCALE, "1.0");
+		SDL_SetHint(SDL_HINT_MOUSE_RELATIVE_SCALING, "0");
 
-			if ( COM_CheckParm ("-noforcemaccel") ) 
-			{
-				newmouseparms[0] = originalmouseparms[0];
-				newmouseparms[1] = originalmouseparms[1];
-			}
-
-			if ( COM_CheckParm ("-noforcemparms") ) 
-			{
-				newmouseparms[0] = originalmouseparms[0];
-				newmouseparms[1] = originalmouseparms[1];
-				newmouseparms[2] = originalmouseparms[2];
-			}
-		}
-	}
-
-	mouse_buttons = 3;
+	mouse_buttons = 5;
 
 // if a fullscreen video mode was set before the mouse was initialized,
 // set the mouse state appropriately
@@ -606,21 +380,12 @@ IN_Shutdown
 */
 void IN_Shutdown (void)
 {
+	if (!mouseinitialized)
+		return;
 
-	IN_DeactivateMouse ();
-	IN_ShowMouse ();
+		IN_DeactivateMouse();
 
-    if (g_pMouse)
-	{
-		IDirectInputDevice_Release(g_pMouse);
-		g_pMouse = NULL;
-	}
-
-    if (g_pdi)
-	{
-		IDirectInput_Release(g_pdi);
-		g_pdi = NULL;
-	}
+		mouseinitialized = false;
 }
 
 
@@ -629,28 +394,28 @@ void IN_Shutdown (void)
 IN_MouseEvent
 ===========
 */
-void IN_MouseEvent (int mstate)
+void IN_MouseEvent(int mstate)
 {
 	int	i;
 
-	if (mouseactive && !dinput)
+	if (mouseactive)
 	{
-	// perform button actions
-		for (i=0 ; i<mouse_buttons ; i++)
+		// perform button actions
+		for (i = 0; i < mouse_buttons; i++)
 		{
-			if ( (mstate & (1<<i)) &&
-				!(mouse_oldbuttonstate & (1<<i)) )
+			if ((mstate & (1 << i)) &&
+				!(mouse_oldbuttonstate & (1 << i)))
 			{
-				Key_Event (K_MOUSE1 + i, true);
+				Key_Event(K_MOUSE1 + i, true);
 			}
 
-			if ( !(mstate & (1<<i)) &&
-				(mouse_oldbuttonstate & (1<<i)) )
+			if (!(mstate & (1 << i)) &&
+				(mouse_oldbuttonstate & (1 << i)))
 			{
-				Key_Event (K_MOUSE1 + i, false);
+				Key_Event(K_MOUSE1 + i, false);
 			}
-		}	
-			
+		}
+
 		mouse_oldbuttonstate = mstate;
 	}
 }
@@ -661,143 +426,36 @@ void IN_MouseEvent (int mstate)
 IN_MouseMove
 ===========
 */
-void IN_MouseMove (usercmd_t *cmd)
+void IN_MouseMove(usercmd_t* cmd)
 {
-	int					mx_local = 0, my_local = 0;
-	int					mx = 0, my = 0;
-	HDC					hdc;
-	int					i;
-	DIDEVICEOBJECTDATA	od;
-	DWORD				dwElements;
-	HRESULT				hr;
-
 	if (!mouseactive)
 		return;
+	int mouseButtons;
+	int mx_local = 0, my_local = 0;
 
-	if (dinput)
+	// read relative mouse movement (SDL gives deltas each frame)
+	mouseButtons = SDL_GetRelativeMouseState(&mx_local, &my_local);
+/*
+	// handle mouse buttons
+	for (int i = 0; i < mouse_buttons; i++)
 	{
-		mx = 0;
-		my = 0;
+		qboolean pressed = (mouseButtons & (1 << i)) != 0;
+		qboolean wasPressed = (mouse_oldbuttonstate & (1 << i)) != 0;
 
-		for (;;)
-		{
-			dwElements = 1;
-
-			hr = IDirectInputDevice_GetDeviceData(g_pMouse,
-					sizeof(DIDEVICEOBJECTDATA), &od, &dwElements, 0);
-
-			if ((hr == DIERR_INPUTLOST) || (hr == DIERR_NOTACQUIRED))
-			{
-				dinput_acquired = true;
-				IDirectInputDevice_Acquire(g_pMouse);
-				break;
-			}
-
-			/* Unable to read data or no data available */
-			if (FAILED(hr) || dwElements == 0)
-			{
-				break;
-			}
-
-			/* Look at the element to see what happened */
-
-			switch (od.dwOfs)
-			{
-				case DIMOFS_X:
-					mx += od.dwData;
-					break;
-
-				case DIMOFS_Y:
-					my += od.dwData;
-					break;
-
-				case DIMOFS_BUTTON0:
-					if (od.dwData & 0x80)
-						mstate_di |= 1;
-					else
-						mstate_di &= ~1;
-					break;
-
-				case DIMOFS_BUTTON1:
-					if (od.dwData & 0x80)
-						mstate_di |= (1<<1);
-					else
-						mstate_di &= ~(1<<1);
-					break;
-					
-				case DIMOFS_BUTTON2:
-					if (od.dwData & 0x80)
-						mstate_di |= (1<<2);
-					else
-						mstate_di &= ~(1<<2);
-					break;
-			}
-		}
-
-	// perform button actions
-		for (i=0 ; i<mouse_buttons ; i++)
-		{
-			if ( (mstate_di & (1<<i)) &&
-				!(mouse_oldbuttonstate & (1<<i)) )
-			{
-				Key_Event (K_MOUSE1 + i, true);
-			}
-
-			if ( !(mstate_di & (1<<i)) &&
-				(mouse_oldbuttonstate & (1<<i)) )
-			{
-				Key_Event (K_MOUSE1 + i, false);
-			}
-		}	
-			
-		mouse_oldbuttonstate = mstate_di;
-
-		// assign into mx_local/my_local for downstream processing
-		mx_local = mx;
-		my_local = my;
-	}
-	else
-	{
-		if (use_rawinput) {
-			// Atomically read and clear accumulated deltas
-			mx_local = (int)InterlockedExchange(&raw_mouse_dx, 0);
-			my_local = (int)InterlockedExchange(&raw_mouse_dy, 0);
-
-			// add any leftover accumulators as fallback
-			mx_local += mx_accum;
-			my_local += my_accum;
-			mx_accum = my_accum = 0;
-
-			// Update buttons state from raw_mouse_button atomically
-			int rawbtns = (int)InterlockedExchange(&raw_mouse_buttons, 0);
-			// map rawbtns -> generate Key_Event transitions
-			for (int i = 0; i < mouse_buttons; ++i) {
-				int mask = 1 << i;
-				qboolean isDown = (rawbtns & mask) != 0;
-				qboolean wasDown = (mouse_oldbuttonstate & mask) != 0;
-				if (isDown && !wasDown) Key_Event(K_MOUSE1 + i, true);
-				if (!isDown && wasDown) Key_Event(K_MOUSE1 + i, false);
-			}
-			mouse_oldbuttonstate = rawbtns;
-		}
-		else {
-			GetCursorPos(&current_pos);
-			mx = current_pos.x - window_center_x + mx_accum;
-			my = current_pos.y - window_center_y + my_accum;
-			mx_accum = 0;
-			my_accum = 0;
-			mx_local = mx;
-			my_local = my;
-		}
+		if (pressed && !wasPressed)
+			Key_Event(K_MOUSE1 + i, true);
+		if (!pressed && wasPressed)
+			Key_Event(K_MOUSE1 + i, false);
 	}
 
-//if (mx ||  my)
-//	Con_DPrintf("mx=%d, my=%d\n", mx, my);
+	mouse_oldbuttonstate = mouseButtons;
 
+	*/
+	// mouse smoothing
 	if (m_filter.value)
 	{
-		mouse_x = (mx_local + old_mouse_x) * 0.5;
-		mouse_y = (my_local + old_mouse_y) * 0.5;
+		mouse_x = (mx_local + old_mouse_x) * 0.5f;
+		mouse_y = (my_local + old_mouse_y) * 0.5f;
 	}
 	else
 	{
@@ -808,20 +466,22 @@ void IN_MouseMove (usercmd_t *cmd)
 	old_mouse_x = mx_local;
 	old_mouse_y = my_local;
 
+	// apply sensitivity scaling
 	mouse_x *= sensitivity.value;
 	mouse_y *= sensitivity.value;
 
-// add mouse X/Y movement to cmd
-	in_mlook.state = 1; // set mouselook as default
-	if ( (in_strafe.state & 1) || (lookstrafe.value && (in_mlook.state & 1) ))
+	// apply movement to Quake usercmd
+	in_mlook.state = 1; // always mouselook
+
+	if ((in_strafe.state & 1) || (lookstrafe.value && (in_mlook.state & 1)))
 		cmd->sidemove += m_side.value * mouse_x;
 	else
 		cl.viewangles[YAW] -= m_yaw.value * mouse_x;
 
 	if (in_mlook.state & 1)
-		V_StopPitchDrift ();
-		
-	if ( (in_mlook.state & 1) && !(in_strafe.state & 1))
+		V_StopPitchDrift();
+
+	if ((in_mlook.state & 1) && !(in_strafe.state & 1))
 	{
 		cl.viewangles[PITCH] += m_pitch.value * mouse_y;
 		if (cl.viewangles[PITCH] > 80)
@@ -829,18 +489,11 @@ void IN_MouseMove (usercmd_t *cmd)
 		if (cl.viewangles[PITCH] < -70)
 			cl.viewangles[PITCH] = -70;
 	}
-	else
-	{
+	else {
 		if ((in_strafe.state & 1) && noclip_anglehack)
 			cmd->upmove -= m_forward.value * mouse_y;
 		else
 			cmd->forwardmove -= m_forward.value * mouse_y;
-	}
-
-// do NOT warp the cursor when using raw input
-	if (!use_rawinput && (mx_local || my_local))
-	{
-		SetCursorPos (window_center_x, window_center_y);
 	}
 }
 

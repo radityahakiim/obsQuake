@@ -118,8 +118,8 @@ modestate_t	modestate = MS_UNINIT;
 void VID_MenuDraw(void);
 void VID_MenuKey(int key);
 
-LONG WINAPI MainWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
-void AppActivate(BOOL fActive, BOOL minimize);
+void HandleEvents();
+void AppActivate(const SDL_Event* event);
 char* VID_GetModeDescription(int mode);
 void ClearAllStates(void);
 void VID_UpdateWindowStatus(void);
@@ -155,6 +155,10 @@ cvar_t		_windowed_mouse = { "_windowed_mouse","1", true };
 int			window_center_x, window_center_y, window_x, window_y, window_width, window_height;
 RECT		window_rect;
 
+// SDL globals
+SDL_Window* window = NULL;
+SDL_GLContext glContext;
+
 // direct draw software compatability stuff
 
 void VID_HandlePause(qboolean pause)
@@ -186,95 +190,47 @@ void D_EndDirectRect(int x, int y, int width, int height)
 {
 }
 
-
-void CenterWindow(HWND hWndCenter, int width, int height, BOOL lefttopjustify)
-{
-	RECT    rect;
-	int     CenterX, CenterY;
-
-	CenterX = (GetSystemMetrics(SM_CXSCREEN) - width) / 2;
-	CenterY = (GetSystemMetrics(SM_CYSCREEN) - height) / 2;
-	if (CenterX > CenterY * 2)
-		CenterX >>= 1;	// dual screens
-	CenterX = (CenterX < 0) ? 0 : CenterX;
-	CenterY = (CenterY < 0) ? 0 : CenterY;
-	SetWindowPos(hWndCenter, NULL, CenterX, CenterY, 0, 0,
-		SWP_NOSIZE | SWP_NOZORDER | SWP_SHOWWINDOW | SWP_DRAWFRAME);
-}
-
 qboolean VID_SetWindowedMode(int modenum)
 {
-	HDC				hdc;
-	int				lastmodestate, width, height;
-	RECT			rect;
+	int width  = modelist[modenum].width;
+	int height = modelist[modenum].height;
 
-	lastmodestate = modestate;
+	// create or resize window
+	if (!window)
+	{
+		window = SDL_CreateWindow(
+			"GLQuake",
+			SDL_WINDOWPOS_CENTERED,
+			SDL_WINDOWPOS_CENTERED,
+			width,
+			height,
+			SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL
+		);
 
-	WindowRect.top = WindowRect.left = 0;
-
-	WindowRect.right = modelist[modenum].width;
-	WindowRect.bottom = modelist[modenum].height;
-
-	DIBWidth = modelist[modenum].width;
-	DIBHeight = modelist[modenum].height;
-
-	WindowStyle = WS_OVERLAPPED | WS_BORDER | WS_CAPTION | WS_SYSMENU |
-		WS_MINIMIZEBOX;
-	ExWindowStyle = 0;
-
-	rect = WindowRect;
-	AdjustWindowRectEx(&rect, WindowStyle, FALSE, 0);
-
-	width = rect.right - rect.left;
-	height = rect.bottom - rect.top;
-
-	// Create the DIB window
-	dibwindow = CreateWindowEx(
-		ExWindowStyle,
-		"WinQuake",
-		"GLQuake",
-		WindowStyle,
-		rect.left, rect.top,
-		width,
-		height,
-		NULL,
-		NULL,
-		global_hInstance,
-		NULL);
-
-	if (!dibwindow)
-		Sys_Error("Couldn't create DIB window");
-
-	// Center and show the DIB window
-	CenterWindow(dibwindow, WindowRect.right - WindowRect.left,
-		WindowRect.bottom - WindowRect.top, false);
-
-	ShowWindow(dibwindow, SW_SHOWDEFAULT);
-	UpdateWindow(dibwindow);
+		if (!window)
+			Sys_Error(va("VID_SetWindowedMode: SDL_CreateWindow failed: %s", SDL_GetError()));
+	}
+	else {
+		SDL_SetWindowSize(window, width, height);
+		SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
+	}
 
 	modestate = MS_WINDOWED;
 
-	// because we have set the background brush for the window to NULL
-	// (to avoid flickering when re-sizing the window on the desktop),
-	// we clear the window to black when created, otherwise it will be
-	// empty while Quake starts up.
-	hdc = GetDC(dibwindow);
-	PatBlt(hdc, 0, 0, WindowRect.right, WindowRect.bottom, BLACKNESS);
-	ReleaseDC(dibwindow, hdc);
+	DIBWidth = width;
+	DIBHeight = height;
 
-	if (vid.conheight > modelist[modenum].height)
-		vid.conheight = modelist[modenum].height;
-	if (vid.conwidth > modelist[modenum].width)
-		vid.conwidth = modelist[modenum].width;
+	WindowRect.left   = 0;
+	WindowRect.top	  = 0;
+	WindowRect.right  = width;
+	WindowRect.bottom = height;
+
+	if (vid.conheight > height) vid.conheight = height;
+	if (vid.conwidth > width) vid.conwidth = width;
+
 	vid.width = vid.conwidth;
 	vid.height = vid.conheight;
-
 	vid.numpages = 2;
-
-	mainwindow = dibwindow;
-
-	SendMessage(mainwindow, WM_SETICON, (WPARAM)TRUE, (LPARAM)hIcon);
-	SendMessage(mainwindow, WM_SETICON, (WPARAM)FALSE, (LPARAM)hIcon);
 
 	return true;
 }
@@ -282,96 +238,63 @@ qboolean VID_SetWindowedMode(int modenum)
 
 qboolean VID_SetFullDIBMode(int modenum)
 {
-	HDC				hdc;
-	int				lastmodestate, width, height;
-	RECT			rect;
+	int width  = modelist[modenum].width;
+	int height = modelist[modenum].height;
+	int bpp = modelist[modenum].bpp ? modelist[modenum].bpp : 32;
 
-	if (!leavecurrentmode)
+	if (!window)
 	{
-		gdevmode.dmFields = DM_BITSPERPEL | DM_PELSWIDTH | DM_PELSHEIGHT;
-		gdevmode.dmBitsPerPel = modelist[modenum].bpp;
-		gdevmode.dmPelsWidth = modelist[modenum].width <<
-			modelist[modenum].halfscreen;
-		gdevmode.dmPelsHeight = modelist[modenum].height;
-		gdevmode.dmSize = sizeof(gdevmode);
+		window = SDL_CreateWindow(
+			"GLQuake",
+			SDL_WINDOWPOS_CENTERED,
+			SDL_WINDOWPOS_CENTERED,
+			width,
+			height,
+			SDL_WINDOW_FULLSCREEN | SDL_WINDOW_OPENGL
+		);
 
-		if (ChangeDisplaySettings(&gdevmode, CDS_FULLSCREEN) != DISP_CHANGE_SUCCESSFUL)
-			Sys_Error("Couldn't set fullscreen DIB mode");
+		if (!window)
+			Sys_Error(va("VID_SetFullDIBMode: SDL_CreateWindow failed: %s", SDL_GetError()));
+	}
+	else {
+		SDL_SetWindowSize(window, width, height);
 	}
 
-	lastmodestate = modestate;
+	SDL_DisplayMode mode;
+	mode.w = width;
+	mode.h = height;
+	mode.refresh_rate = 0; // keep default if unknown
+	mode.format = SDL_PIXELFORMAT_RGB888;
+
+	if (SDL_SetWindowDisplayMode(window, &mode) != 0)
+	{
+		Sys_Error(va("VID_SetFullDIBMode: SDL_SetWindowDisplayMode failed: %s", SDL_GetError()));
+	}
+	if (SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN) != 0)
+	{
+		Sys_Error(va("VID_SetFullDIBMode: SDL_SetWindowFullScreen failed: %s", SDL_GetError()));
+	}
+
+	// update video mode
 	modestate = MS_FULLDIB;
 
-	WindowRect.top = WindowRect.left = 0;
+	DIBWidth = width;
+	DIBHeight = height;
 
-	WindowRect.right = modelist[modenum].width;
-	WindowRect.bottom = modelist[modenum].height;
+	WindowRect.left = 0;
+	WindowRect.top = 0;
+	WindowRect.right = width;
+	WindowRect.bottom = height;
 
-	DIBWidth = modelist[modenum].width;
-	DIBHeight = modelist[modenum].height;
-
-	WindowStyle = WS_POPUP;
-	ExWindowStyle = 0;
-
-	rect = WindowRect;
-	AdjustWindowRectEx(&rect, WindowStyle, FALSE, 0);
-
-	width = rect.right - rect.left;
-	height = rect.bottom - rect.top;
-
-	// Create the DIB window
-	dibwindow = CreateWindowEx(
-		ExWindowStyle,
-		"WinQuake",
-		"GLQuake",
-		WindowStyle,
-		rect.left, rect.top,
-		width,
-		height,
-		NULL,
-		NULL,
-		global_hInstance,
-		NULL);
-
-	if (!dibwindow)
-		Sys_Error("Couldn't create DIB window");
-
-	ShowWindow(dibwindow, SW_SHOWDEFAULT);
-	UpdateWindow(dibwindow);
-
-	// Because we have set the background brush for the window to NULL
-	// (to avoid flickering when re-sizing the window on the desktop), we
-	// clear the window to black when created, otherwise it will be
-	// empty while Quake starts up.
-	hdc = GetDC(dibwindow);
-	PatBlt(hdc, 0, 0, WindowRect.right, WindowRect.bottom, BLACKNESS);
-	ReleaseDC(dibwindow, hdc);
-
-	// set console / rendering sizes to match fullscreen mode
-	vid.conwidth = modelist[modenum].width;
-	vid.conheight = modelist[modenum].height;
-	vid.conrowbytes = vid.conwidth;
-
-	vid.width = DIBWidth;
-	vid.height = DIBHeight;
-	vid.rowbytes = vid.width;
-
-	// ensure console dimensions do not exceed mode
-	if (vid.conheight > modelist[modenum].height)
-		vid.conheight = modelist[modenum].height;
-	if (vid.conwidth > modelist[modenum].width)
-		vid.conwidth = modelist[modenum].width;
-
+	vid.conwidth = width;
+	vid.conheight = height;
+	vid.width = width;
+	vid.height = height;
+	vid.rowbytes = width;
 	vid.numpages = 2;
 
-	// needed because we're not getting WM_MOVE messages fullscreen on NT
 	window_x = 0;
 	window_y = 0;
-
-	mainwindow = dibwindow;
-
-	SendMessage(mainwindow, WM_SETICON, (WPARAM)TRUE, (LPARAM)hIcon);
-	SendMessage(mainwindow, WM_SETICON, (WPARAM)FALSE, (LPARAM)hIcon);
 
 	return true;
 }
@@ -379,100 +302,129 @@ qboolean VID_SetFullDIBMode(int modenum)
 
 int VID_SetMode(int modenum, unsigned char* palette)
 {
-	int				original_mode, temp;
-	qboolean		stat;
-	MSG				msg;
-	HDC				hdc;
+	if (modenum < 0 || modenum >= nummodes)
+		Sys_Error("Vid_SetMode: Invalid mode index");
 
-	if ((windowed && (modenum != 0)) ||
-		(!windowed && (modenum < 1)) ||
-		(!windowed && (modenum >= nummodes)))
-	{
-		Sys_Error("Bad video mode\n");
-	}
-
-	// so Con_Printfs don't mess us up by forcing vid and snd updates
-	temp = scr_disabled_for_loading;
 	scr_disabled_for_loading = true;
-
 	CDAudio_Pause();
 
-	if (vid_modenum == NO_MODE)
-		original_mode = windowed_default;
-	else
-		original_mode = vid_modenum;
+	vmode_t mode = modelist[modenum];
+	vid_modenum = modenum;
 
-	// Set either the fullscreen or windowed mode
-	if (modelist[modenum].type == MS_WINDOWED)
+	int width = mode.width;
+	int height = mode.height;
+
+	Uint32 flags = SDL_GetWindowFlags(window);
+
+	// check existing GL context
+	if (glContext) {
+		SDL_GL_DeleteContext(glContext);
+		glContext = NULL;
+	}
+
+	if (mode.type == MS_WINDOWED)
 	{
+		if (!window) {
+			window = SDL_CreateWindow(
+				"GLQuake",
+				SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+				width, height,
+				SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE
+			);
+		}
+		else {
+			SDL_SetWindowFullscreen(window, 0);
+			SDL_SetWindowSize(window, width, height);
+			SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
+		}
+		// mouse behavior
 		if (_windowed_mouse.value && key_dest == key_game)
 		{
-			stat = VID_SetWindowedMode(modenum);
-			IN_ActivateMouse();
-			IN_HideMouse();
+			SDL_SetRelativeMouseMode(SDL_TRUE);
 		}
-		else
-		{
-			IN_DeactivateMouse();
-			IN_ShowMouse();
-			stat = VID_SetWindowedMode(modenum);
+		else {
+			SDL_SetRelativeMouseMode(SDL_FALSE);
 		}
 	}
-	else if (modelist[modenum].type == MS_FULLDIB)
+	else if (mode.type == MS_FULLDIB)
 	{
-		stat = VID_SetFullDIBMode(modenum);
-		IN_ActivateMouse();
-		IN_HideMouse();
+		if (!window) {
+			window = SDL_CreateWindow(
+				"GLQuake",
+				SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+				width, height,
+				SDL_WINDOW_OPENGL | SDL_WINDOW_FULLSCREEN
+			);
+		}
+		else {
+			SDL_SetWindowSize(window, width, height);
+		}
+
+		SDL_DisplayMode sdl_dm;
+		sdl_dm.w = width;
+		sdl_dm.h = height;
+		sdl_dm.refresh_rate = 0;
+		sdl_dm.format = SDL_PIXELFORMAT_RGB888;
+
+		if (SDL_SetWindowDisplayMode(window, &sdl_dm) != 0)
+		{
+			Con_SafePrintf("Warning: SDL_SetWindowDisplayMode failed: %s\n", SDL_GetError());
+		}
+		if (SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN) != 0)
+		{
+			Con_SafePrintf("Warning: SDL_SetWindowFullscreen failed: %s\n", SDL_GetError());
+		}
+		SDL_SetRelativeMouseMode(SDL_TRUE);
 	}
 	else
 	{
-		Sys_Error("VID_SetMode: Bad mode type in modelist");
+		Sys_Error("VID_SetMode: Unsupported mode type");
 	}
 
-	window_width = DIBWidth;
-	window_height = DIBHeight;
-	VID_UpdateWindowStatus();
+	if (!window)
+		Sys_Error(va("VID_SetMode: SDL_CreateWindow failed: %s", SDL_GetError()));
+
+	// create GL context
+	glContext = SDL_GL_CreateContext(window);
+	if (!glContext)
+	{
+		Sys_Error(va("Could not initialize GL context: %s", SDL_GetError()));
+	}
+
+	if (SDL_GL_MakeCurrent(window, glContext) != 0) {
+		Sys_Error(va("SDL_GL_MakeCurrent failed: %s", SDL_GetError()));
+	}
+
+	modestate = mode.type;
+
+	DIBWidth = width;
+	DIBHeight = height;
+
+	WindowRect.left = 0;
+	WindowRect.top = 0;
+	WindowRect.right = width;
+	WindowRect.bottom = height;
+
+	// internal window reference sizes
+	int drawable_w, drawable_h;
+	SDL_GL_GetDrawableSize(window, &drawable_w, &drawable_h);
+
+	vid.width = drawable_w;
+	vid.height = drawable_h;
+	vid.rowbytes = vid.width * 4; // 4bpp
+
+	vid.conwidth = min(vid.conwidth, vid.width);
+	vid.conheight = min(vid.conheight, vid.height);
+
+	VID_SetPalette(palette);
+
+	// PeekMessage equivalent
+	SDL_PumpEvents();
 
 	CDAudio_Resume();
-	scr_disabled_for_loading = temp;
+	scr_disabled_for_loading = false;
 
-	if (!stat)
-	{
-		Sys_Error("Couldn't set video mode");
-	}
-
-	// now we try to make sure we get the focus on the mode switch, because
-	// sometimes in some systems we don't.  We grab the foreground, then
-	// finish setting up, pump all our messages, and sleep for a little while
-	// to let messages finish bouncing around the system, then we put
-	// ourselves at the top of the z order, then grab the foreground again,
-	// Who knows if it helps, but it probably doesn't hurt
-	SetForegroundWindow(mainwindow);
-	VID_SetPalette(palette);
-	vid_modenum = modenum;
-	Cvar_SetValue("vid_mode", (float)vid_modenum);
-
-	while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
-	{
-		TranslateMessage(&msg);
-		DispatchMessage(&msg);
-	}
-
-	Sleep(100);
-
-	SetWindowPos(mainwindow, HWND_TOP, 0, 0, 0, 0,
-		SWP_DRAWFRAME | SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW |
-		SWP_NOCOPYBITS);
-
-	SetForegroundWindow(mainwindow);
-
-	// fix the leftover Alt from any Alt-Tab or the like that switched us away
-	ClearAllStates();
-
-	if (!msg_suppress_1)
-		Con_SafePrintf("Video mode %s initialized.\n", VID_GetModeDescription(vid_modenum));
-
-	VID_SetPalette(palette);
+	Con_Printf("Video mode: %dx%d%s\n", width, height, (mode.type == MS_FULLDIB ? " fullscreen" : " windowed"));
 
 	vid.recalc_refdef = 1;
 
@@ -508,41 +460,18 @@ BINDTEXFUNCPTR bindTexFunc;
 
 void CheckTextureExtensions(void)
 {
-	char* tmp;
-	qboolean	texture_ext;
-	HINSTANCE	hInstGL;
-
-	texture_ext = FALSE;
-	/* check for texture extension */
-	tmp = (unsigned char*)glGetString(GL_EXTENSIONS);
-	while (*tmp)
+	if (!strstr(gl_extensions, "GL_EXT_texture_object"))
 	{
-		if (strncmp((const char*)tmp, TEXTURE_EXT_STRING, strlen(TEXTURE_EXT_STRING)) == 0)
-			texture_ext = TRUE;
-		tmp++;
-	}
-
-	if (!texture_ext || COM_CheckParm("-gl11"))
-	{
-		hInstGL = LoadLibrary("opengl32.dll");
-
-		if (hInstGL == NULL)
-			Sys_Error("Couldn't load opengl32.dll\n");
-
-		bindTexFunc = (void*)GetProcAddress(hInstGL, "glBindTexture");
-
-		if (!bindTexFunc)
-			Sys_Error("No texture objects!");
+		Con_SafePrintf("No texture object extension, using fallback.\n");
 		return;
 	}
 
-	/* load library and get procedure adresses for texture extension API */
-	if ((bindTexFunc = (BINDTEXFUNCPTR)
-		wglGetProcAddress((LPCSTR)"glBindTextureEXT")) == NULL)
-	{
-		Sys_Error("GetProcAddress for BindTextureEXT failed");
-		return;
-	}
+	// load glBinTextture
+	bindTexFunc = SDL_GL_GetProcAddress("glBindTextureEXT");
+	if (!bindTexFunc)
+		bindTexFunc = SDL_GL_GetProcAddress("glBindTexture");
+	if (!bindTexFunc)
+		Sys_Error("GL: No glBindTexture available!");
 }
 
 void CheckArrayExtensions(void)
@@ -556,10 +485,10 @@ void CheckArrayExtensions(void)
 		if (strncmp((const char*)tmp, "GL_EXT_vertex_array", strlen("GL_EXT_vertex_array")) == 0)
 		{
 			if (
-				((glArrayElementEXT = wglGetProcAddress("glArrayElementEXT")) == NULL) ||
-				((glColorPointerEXT = wglGetProcAddress("glColorPointerEXT")) == NULL) ||
-				((glTexCoordPointerEXT = wglGetProcAddress("glTexCoordPointerEXT")) == NULL) ||
-				((glVertexPointerEXT = wglGetProcAddress("glVertexPointerEXT")) == NULL))
+				((glArrayElementEXT = SDL_GL_GetProcAddress("glArrayElementEXT")) == NULL) ||
+				((glColorPointerEXT = SDL_GL_GetProcAddress("glColorPointerEXT")) == NULL) ||
+				((glTexCoordPointerEXT = SDL_GL_GetProcAddress("glTexCoordPointerEXT")) == NULL) ||
+				((glVertexPointerEXT = SDL_GL_GetProcAddress("glVertexPointerEXT")) == NULL))
 			{
 				Sys_Error("GetProcAddress for vertex extension failed");
 				return;
@@ -586,8 +515,8 @@ void CheckMultiTextureExtensions(void)
 {
 	if (strstr(gl_extensions, "GL_SGIS_multitexture ") && !COM_CheckParm("-nomtex")) {
 		Con_Printf("Multitexture extensions found.\n");
-		qglMTexCoord2fSGIS = (void*)wglGetProcAddress("glMTexCoord2fSGIS");
-		qglSelectTextureSGIS = (void*)wglGetProcAddress("glSelectTextureSGIS");
+		qglMTexCoord2fSGIS = SDL_GL_GetProcAddress("glMTexCoord2fSGIS");
+		qglSelectTextureSGIS = SDL_GL_GetProcAddress("glSelectTextureSGIS");
 		gl_mtexable = true;
 	}
 }
@@ -681,7 +610,7 @@ void GL_BeginRendering(int* x, int* y, int* width, int* height)
 void GL_EndRendering(void)
 {
 	if (!scr_skipupdate || block_drawing)
-		SwapBuffers(maindc);
+		SDL_GL_SwapWindow(window);
 
 	// handle the mouse state when windowed if that's changed
 	if (modestate == MS_WINDOWED)
@@ -711,17 +640,14 @@ void GL_EndRendering(void)
 
 void	VID_SetPalette(unsigned char* palette)
 {
-	byte* pal;
+	unsigned char* pal;
 	unsigned r, g, b;
 	unsigned v;
 	int     r1, g1, b1;
 	int		j, k, l, m;
 	unsigned short i;
 	unsigned* table;
-	FILE* f;
 	char s[255];
-	HWND hDlg, hProgress;
-	float gamma;
 
 	//
 	// 8 8 8 encoding
@@ -735,9 +661,8 @@ void	VID_SetPalette(unsigned char* palette)
 		b = pal[2];
 		pal += 3;
 
-		//		v = (255<<24) + (r<<16) + (g<<8) + (b<<0);
-		//		v = (255<<0) + (r<<8) + (g<<16) + (b<<24);
-		v = (255 << 24) + (r << 0) + (g << 8) + (b << 16);
+		// storea s RGBA
+		v = (255 << 24) | (b << 16) | (g << 8) | (r);
 		*table++ = v;
 	}
 	d_8to24table[255] &= 0xffffff;	// 255 is transparent
@@ -754,11 +679,11 @@ void	VID_SetPalette(unsigned char* palette)
 		r = ((i & 0x1F) << 3) + 4;
 		g = ((i & 0x03E0) >> 2) + 4;
 		b = ((i & 0x7C00) >> 7) + 4;
-		pal = (unsigned char*)d_8to24table;
-		for (v = 0, k = 0, l = 10000 * 10000; v < 256; v++, pal += 4) {
-			r1 = r - pal[0];
-			g1 = g - pal[1];
-			b1 = b - pal[2];
+		unsigned char* pal24 = (unsigned char*)d_8to24table;
+		for (v = 0, k = 0, l = INT_MAX; v < 256; v++, pal24 += 4) {
+			r1 = r - pal24[0];
+			g1 = g - pal24[1];
+			b1 = b - pal24[2];
 			j = (r1 * r1) + (g1 * g1) + (b1 * b1);
 			if (j < l) {
 				k = v;
@@ -789,76 +714,33 @@ void VID_SetDefaultMode(void)
 
 void	VID_Shutdown(void)
 {
-	HGLRC hRC;
-	HDC	  hDC;
+	if (!vid_initialized)
+		return;
 
-	if (vid_initialized)
+	vid_initialized = false;
+
+	if (modestate == MS_FULLDIB)
+		SDL_SetWindowFullscreen(window, 0);
+
+	SDL_SetRelativeMouseMode(SDL_FALSE);
+	SDL_ShowCursor(SDL_TRUE);
+
+	if (glContext)
 	{
-		vid_canalttab = false;
-		hRC = wglGetCurrentContext();
-		hDC = wglGetCurrentDC();
-
-		wglMakeCurrent(NULL, NULL);
-
-		if (hRC)
-			wglDeleteContext(hRC);
-
-		if (hDC && dibwindow)
-			ReleaseDC(dibwindow, hDC);
-
-		if (modestate == MS_FULLDIB)
-			ChangeDisplaySettings(NULL, 0);
-
-		if (maindc && dibwindow)
-			ReleaseDC(dibwindow, maindc);
-
-		AppActivate(false, false);
+		SDL_GL_DeleteContext(glContext);
+		glContext = NULL;
 	}
+
+	if (window)
+	{
+		SDL_DestroyWindow(window);
+		window = NULL;
+	}
+	SDL_QuitSubSystem(SDL_INIT_VIDEO);
 }
 
 
 //==========================================================================
-
-
-BOOL bSetupPixelFormat(HDC hDC)
-{
-	static PIXELFORMATDESCRIPTOR pfd = {
-	sizeof(PIXELFORMATDESCRIPTOR),	// size of this pfd
-	1,				// version number
-	PFD_DRAW_TO_WINDOW 		// support window
-	| PFD_SUPPORT_OPENGL 	// support OpenGL
-	| PFD_DOUBLEBUFFER ,	// double buffered
-	PFD_TYPE_RGBA,			// RGBA type
-	24,				// 24-bit color depth
-	0, 0, 0, 0, 0, 0,		// color bits ignored
-	0,				// no alpha buffer
-	0,				// shift bit ignored
-	0,				// no accumulation buffer
-	0, 0, 0, 0, 			// accum bits ignored
-	32,				// 32-bit z-buffer	
-	0,				// no stencil buffer
-	0,				// no auxiliary buffer
-	PFD_MAIN_PLANE,			// main layer
-	0,				// reserved
-	0, 0, 0				// layer masks ignored
-	};
-	int pixelformat;
-
-	if ((pixelformat = ChoosePixelFormat(hDC, &pfd)) == 0)
-	{
-		MessageBox(NULL, "ChoosePixelFormat failed", "Error", MB_OK);
-		return FALSE;
-	}
-
-	if (SetPixelFormat(hDC, pixelformat, &pfd) == FALSE)
-	{
-		MessageBox(NULL, "SetPixelFormat failed", "Error", MB_OK);
-		return FALSE;
-	}
-
-	return TRUE;
-}
-
 
 
 byte        scantokey[128] =
@@ -913,14 +795,90 @@ MapKey
 Map from windows to quake keynums
 =======
 */
-int MapKey(int key)
+int MapKey(int scancode)
 {
-	key = (key >> 16) & 255;
-	if (key > 127)
-		return 0;
-	if (scantokey[key] == 0)
-		Con_DPrintf("key 0x%02x has no translation\n", key);
-	return scantokey[key];
+	switch (scancode)
+	{
+	case SDL_SCANCODE_ESCAPE:      return K_ESCAPE;
+	case SDL_SCANCODE_TAB:         return K_TAB;
+	case SDL_SCANCODE_RETURN:      return K_ENTER;
+	case SDL_SCANCODE_SPACE:       return K_SPACE;
+	case SDL_SCANCODE_BACKSPACE:   return K_BACKSPACE;
+
+	case SDL_SCANCODE_UP:          return K_UPARROW;
+	case SDL_SCANCODE_DOWN:        return K_DOWNARROW;
+	case SDL_SCANCODE_LEFT:        return K_LEFTARROW;
+	case SDL_SCANCODE_RIGHT:       return K_RIGHTARROW;
+
+	case SDL_SCANCODE_LCTRL:
+	case SDL_SCANCODE_RCTRL:       return K_CTRL;
+
+	case SDL_SCANCODE_LSHIFT:
+	case SDL_SCANCODE_RSHIFT:      return K_SHIFT;
+
+	case SDL_SCANCODE_LALT:
+	case SDL_SCANCODE_RALT:        return K_ALT;
+
+	case SDL_SCANCODE_F1:  return K_F1;
+	case SDL_SCANCODE_F2:  return K_F2;
+	case SDL_SCANCODE_F3:  return K_F3;
+	case SDL_SCANCODE_F4:  return K_F4;
+	case SDL_SCANCODE_F5:  return K_F5;
+	case SDL_SCANCODE_F6:  return K_F6;
+	case SDL_SCANCODE_F7:  return K_F7;
+	case SDL_SCANCODE_F8:  return K_F8;
+	case SDL_SCANCODE_F9:  return K_F9;
+	case SDL_SCANCODE_F10: return K_F10;
+	case SDL_SCANCODE_F11: return K_F11;
+	case SDL_SCANCODE_F12: return K_F12;
+
+	case SDL_SCANCODE_DELETE:      return K_DEL;
+	case SDL_SCANCODE_HOME:        return K_HOME;
+	case SDL_SCANCODE_END:         return K_END;
+	case SDL_SCANCODE_PAGEUP:      return K_PGUP;
+	case SDL_SCANCODE_PAGEDOWN:    return K_PGDN;
+	case SDL_SCANCODE_INSERT:      return K_INS;
+
+		// ------- Numeric keypad mapped to AUX keys --------
+	case SDL_SCANCODE_KP_0:        return K_AUX1;
+	case SDL_SCANCODE_KP_1:        return K_AUX2;
+	case SDL_SCANCODE_KP_2:        return K_AUX3;
+	case SDL_SCANCODE_KP_3:        return K_AUX4;
+	case SDL_SCANCODE_KP_4:        return K_AUX5;
+	case SDL_SCANCODE_KP_5:        return K_AUX6;
+	case SDL_SCANCODE_KP_6:        return K_AUX7;
+	case SDL_SCANCODE_KP_7:        return K_AUX8;
+	case SDL_SCANCODE_KP_8:        return K_AUX9;
+	case SDL_SCANCODE_KP_9:        return K_AUX10;
+	case SDL_SCANCODE_KP_PERIOD:   return K_AUX11;
+
+	case SDL_SCANCODE_PAUSE:       return K_PAUSE;
+
+	case SDL_SCANCODE_MINUS:       return '-';
+	case SDL_SCANCODE_EQUALS:      return '=';
+	case SDL_SCANCODE_LEFTBRACKET: return '[';
+	case SDL_SCANCODE_RIGHTBRACKET:return ']';
+	case SDL_SCANCODE_SEMICOLON:   return ';';
+	case SDL_SCANCODE_APOSTROPHE:  return '\'';
+	case SDL_SCANCODE_BACKSLASH:   return '\\';
+	case SDL_SCANCODE_SLASH:       return '/';
+	case SDL_SCANCODE_GRAVE:       return '`';
+
+	default:
+		break;
+	}
+
+	// return ASCII if the key is printable
+	if (scancode >= SDL_SCANCODE_A && scancode <= SDL_SCANCODE_Z)
+		return 'a' + (scancode - SDL_SCANCODE_A);
+
+	if (scancode >= SDL_SCANCODE_1 && scancode <= SDL_SCANCODE_9)
+		return '1' + (scancode - SDL_SCANCODE_1);
+
+	if (scancode == SDL_SCANCODE_0)
+		return '0';
+
+	return 0;
 }
 
 /*
@@ -950,27 +908,33 @@ void ClearAllStates(void)
 	IN_ClearStates();
 }
 
-void AppActivate(BOOL fActive, BOOL minimize)
-/****************************************************************************
-*
-* Function:     AppActivate
-* Parameters:   fActive - True if app is activating
-*
-* Description:  If the application is activating, then swap the system
-*               into SYSPAL_NOSTATIC mode so that our palettes will display
-*               correctly.
-*
-****************************************************************************/
+void AppActivate(const SDL_Event* event)
 {
-	MSG msg;
-	HDC			hdc;
-	int			i, t;
-	static BOOL	sound_active;
+	static qboolean sound_active = true;
 
-	ActiveApp = fActive;
-	Minimized = minimize;
+	qboolean active = false;
+	qboolean inactive = false;
 
-	// enable/disable sound on focus gain/loss
+	if (event->type == SDL_WINDOWEVENT)
+	{
+		switch (event->window.event)
+		{
+		case SDL_WINDOWEVENT_FOCUS_GAINED:
+		case SDL_WINDOWEVENT_RESTORED:
+			active = true;
+			break;
+
+		case SDL_WINDOWEVENT_FOCUS_LOST:
+		case SDL_WINDOWEVENT_MINIMIZED:
+			inactive = true;
+			break;
+		}
+	}
+
+	ActiveApp = active;
+	Minimized = inactive;
+
+	// Sound handling
 	if (!ActiveApp && sound_active)
 	{
 		S_BlockSound();
@@ -982,174 +946,100 @@ void AppActivate(BOOL fActive, BOOL minimize)
 		sound_active = true;
 	}
 
-	if (fActive)
+	// Mouse behavior
+	if (active)
 	{
-		if (modestate == MS_FULLDIB)
+		if (modestate == MS_FULLDIB ||
+			(modestate == MS_WINDOWED && _windowed_mouse.value && key_dest == key_game))
 		{
-			IN_ActivateMouse();
-			IN_HideMouse();
-			if (vid_canalttab && vid_wassuspended) {
-				vid_wassuspended = false;
-				ChangeDisplaySettings(&gdevmode, CDS_FULLSCREEN);
-				ShowWindow(mainwindow, SW_SHOWNORMAL);
-			}
+			SDL_SetRelativeMouseMode(SDL_TRUE);
 		}
-		else if ((modestate == MS_WINDOWED) && _windowed_mouse.value && key_dest == key_game)
-		{
-			IN_ActivateMouse();
-			IN_HideMouse();
-		}
+
+		ClearAllStates();
 	}
 
-	if (!fActive)
+	if (inactive)
 	{
-		if (modestate == MS_FULLDIB)
-		{
-			IN_DeactivateMouse();
-			IN_ShowMouse();
-			if (vid_canalttab) {
-				ChangeDisplaySettings(NULL, 0);
-				vid_wassuspended = true;
-			}
-		}
-		else if ((modestate == MS_WINDOWED) && _windowed_mouse.value)
-		{
-			IN_DeactivateMouse();
-			IN_ShowMouse();
-		}
+		SDL_SetRelativeMouseMode(SDL_FALSE);
+		ClearAllStates();
 	}
 }
 
 
 /* main window procedure */
-LONG WINAPI MainWndProc(
-	HWND    hWnd,
-	UINT    uMsg,
-	WPARAM  wParam,
-	LPARAM  lParam)
+void HandleEvents()
 {
-	LONG    lRet = 1;
-	int		fwKeys, xPos, yPos, fActive, fMinimized, temp;
-	extern unsigned int uiWheelMessage;
+	SDL_Event event;
 
-	if (uMsg == uiWheelMessage)
-		uMsg = WM_MOUSEWHEEL;
-
-	switch (uMsg)
+	while (SDL_PollEvent(&event))
 	{
-	case WM_KILLFOCUS:
-		if (modestate == MS_FULLDIB)
-			ShowWindow(mainwindow, SW_SHOWMINNOACTIVE);
-		break;
-
-	case WM_CREATE:
-		break;
-
-	case WM_MOVE:
-		window_x = (int)LOWORD(lParam);
-		window_y = (int)HIWORD(lParam);
-		VID_UpdateWindowStatus();
-		break;
-
-	case WM_KEYDOWN:
-	case WM_SYSKEYDOWN:
-		Key_Event(MapKey(lParam), true);
-		break;
-
-	case WM_KEYUP:
-	case WM_SYSKEYUP:
-		Key_Event(MapKey(lParam), false);
-		break;
-
-	case WM_SYSCHAR:
-		// keep Alt-Space from happening
-		break;
-
-		// this is complicated because Win32 seems to pack multiple mouse events into
-		// one update sometimes, so we always check all states and look for events
-	case WM_LBUTTONDOWN:
-	case WM_LBUTTONUP:
-	case WM_RBUTTONDOWN:
-	case WM_RBUTTONUP:
-	case WM_MBUTTONDOWN:
-	case WM_MBUTTONUP:
-	case WM_MOUSEMOVE:
-		temp = 0;
-
-		if (wParam & MK_LBUTTON)
-			temp |= 1;
-
-		if (wParam & MK_RBUTTON)
-			temp |= 2;
-
-		if (wParam & MK_MBUTTON)
-			temp |= 4;
-
-		IN_MouseEvent(temp);
-
-		break;
-
-		// JACK: This is the mouse wheel with the Intellimouse
-		// Its delta is either positive or neg, and we generate the proper
-		// Event.
-	case WM_MOUSEWHEEL:
-		if ((short)HIWORD(wParam) > 0) {
-			Key_Event(K_MWHEELUP, true);
-			Key_Event(K_MWHEELUP, false);
-		}
-		else {
-			Key_Event(K_MWHEELDOWN, true);
-			Key_Event(K_MWHEELDOWN, false);
-		}
-		break;
-
-	case WM_SIZE:
-		break;
-
-	case WM_INPUT:
-		IN_ProcessRawInput((HRAWINPUT)lParam);
-		break;
-
-	case WM_CLOSE:
-		if (MessageBox(mainwindow, "Are you sure you want to quit?", "Confirm Exit",
-			MB_YESNO | MB_SETFOREGROUND | MB_ICONQUESTION) == IDYES)
-		{
+		switch (event.type) {
+		case SDL_QUIT:
+			// clode the window
 			Sys_Quit();
+			break;
+		case SDL_WINDOWEVENT:
+			switch (event.window.event) {
+			case SDL_WINDOWEVENT_MOVED:
+				window_x = event.window.data1;
+				window_y = event.window.data2;
+				VID_UpdateWindowStatus();
+				break;
+			case SDL_WINDOWEVENT_FOCUS_GAINED:
+			case SDL_WINDOWEVENT_RESTORED:
+				ActiveApp = true;
+				IN_ActivateMouse();
+				break;
+			case SDL_WINDOWEVENT_FOCUS_LOST:
+			case SDL_WINDOWEVENT_MINIMIZED:
+				ActiveApp = false;
+				IN_DeactivateMouse();
+				break;
+			}
+			break;
+		case SDL_KEYDOWN:
+		case SDL_KEYUP: {
+			int key = MapKey(event.key.keysym.scancode);
+			if (key) {
+				Key_Event(key, (event.type == SDL_KEYDOWN));
+			}
 		}
+			break;
+		case SDL_MOUSEMOTION:
+			IN_MouseMove(event.motion.xrel, event.motion.yrel);
+			break;
 
-		break;
+		case SDL_MOUSEBUTTONDOWN:
+		case SDL_MOUSEBUTTONUP:
+		{
+			int buttonstate = -1;
+			qboolean down = (event.type == SDL_MOUSEBUTTONDOWN);
 
-	case WM_ACTIVATE:
-		fActive = LOWORD(wParam);
-		fMinimized = (BOOL)HIWORD(wParam);
-		AppActivate(!(fActive == WA_INACTIVE), fMinimized);
+			switch (event.button.button) {
+			case SDL_BUTTON_LEFT:   buttonstate = K_MOUSE1; break;
+			case SDL_BUTTON_RIGHT:  buttonstate = K_MOUSE2; break;
+			case SDL_BUTTON_MIDDLE: buttonstate = K_MOUSE3; break;
+			case SDL_BUTTON_X1:		buttonstate = K_MOUSE4; break;
+			case SDL_BUTTON_X2:		buttonstate = K_MOUSE5; break;
+			}
+			if (buttonstate != -1) {
+				Key_Event(buttonstate, down);
+			}
+			break;
+		}
+		case SDL_MOUSEWHEEL:
+			if (event.wheel.y > 0) {
+				Key_Event(K_MWHEELUP, true);
+				Key_Event(K_MWHEELUP, false);
+			}
+			else if (event.wheel.y < 0) {
+				Key_Event(K_MWHEELDOWN, true);
+				Key_Event(K_MWHEELDOWN, false);
 
-		// fix the leftover Alt from any Alt-Tab or the like that switched us away
-		ClearAllStates();
-
-		break;
-
-	case WM_DESTROY:
-	{
-		if (dibwindow)
-			DestroyWindow(dibwindow);
-
-		PostQuitMessage(0);
+			}
+			break;
+		}
 	}
-	break;
-
-	case MM_MCINOTIFY:
-		lRet = CDAudio_MessageHandler(hWnd, uMsg, wParam, lParam);
-		break;
-
-	default:
-		/* pass all unhandled messages to DefWindowProc */
-		lRet = DefWindowProc(hWnd, uMsg, wParam, lParam);
-		break;
-	}
-
-	/* return 1 if handled message, 0 if not */
-	return lRet;
 }
 
 
@@ -1319,48 +1209,26 @@ void VID_DescribeModes_f(void)
 }
 
 
-void VID_InitDIB(HINSTANCE hInstance)
+void VID_InitDIB(void)
 {
-	WNDCLASS		wc;
-	HDC				hdc;
-	int				i;
+	int width = 640;
+	int height;
 
-	/* Register the frame class */
-	wc.style = 0;
-	wc.lpfnWndProc = (WNDPROC)MainWndProc;
-	wc.cbClsExtra = 0;
-	wc.cbWndExtra = 0;
-	wc.hInstance = hInstance;
-	wc.hIcon = 0;
-	wc.hCursor = LoadCursor(NULL, IDC_ARROW);
-	wc.hbrBackground = NULL;
-	wc.lpszMenuName = 0;
-	wc.lpszClassName = "WinQuake";
-
-	if (!RegisterClass(&wc))
-		Sys_Error("Couldn't register window class");
-
-	modelist[0].type = MS_WINDOWED;
-
+	// argument passing
 	if (COM_CheckParm("-width"))
-		modelist[0].width = Q_atoi(com_argv[COM_CheckParm("-width") + 1]);
-	else
-		modelist[0].width = 640;
-
-	if (modelist[0].width < 320)
-		modelist[0].width = 320;
+		width = Q_atoi(com_argv[COM_CheckParm("-width") + 1]);
 
 	if (COM_CheckParm("-height"))
-		modelist[0].height = Q_atoi(com_argv[COM_CheckParm("-height") + 1]);
+		height = Q_atoi(com_argv[COM_CheckParm("-height") + 1]);
 	else
-		modelist[0].height = modelist[0].width * 240 / 320;
+		height = width * 240 / 320;
 
-	if (modelist[0].height < 240)
-		modelist[0].height = 240;
+	if (width < 320)	width  = 320;
+	if (height < 240)	height = 240;
 
-	sprintf(modelist[0].modedesc, "%dx%d",
-		modelist[0].width, modelist[0].height);
-
+	modelist[0].type = MS_WINDOWED;
+	modelist[0].width = width;
+	modelist[0].height = height;
 	modelist[0].modenum = MODE_WINDOWED;
 	modelist[0].dib = 1;
 	modelist[0].fullscreen = 0;
@@ -1376,48 +1244,70 @@ void VID_InitDIB(HINSTANCE hInstance)
 VID_InitFullDIB
 =================
 */
-void VID_InitFullDIB(HINSTANCE hInstance)
+void VID_InitFullDIB()
 {
-	DEVMODE	devmode = {0};
-	devmode.dmSize = sizeof(devmode);
-	int		modenum = 0;
-	int		i, existingmode;
-	int		originalnummodes = nummodes;
+	int display_idx = 0;
+	int mode_count = SDL_GetNumDisplayModes(display_idx);
 
-	// Use enum, remove some obsolete loops for scanning video modes (get rid stuttering effect at start)
-	while (EnumDisplaySettingsEx(NULL, modenum, &devmode, 0))
+	if (mode_count < 1)
 	{
-		if (devmode.dmBitsPerPel >= 32 &&
-			(devmode.dmPelsWidth <= MAXWIDTH) &&
-			(devmode.dmPelsHeight <= MAXHEIGHT))
-		{
-			existingmode = 0;
-			for (int i = originalnummodes; i < nummodes; i++) {
-				if (modelist[i].width == devmode.dmPelsWidth &&
-					modelist[i].height == devmode.dmPelsHeight &&
-					modelist[i].bpp == devmode.dmBitsPerPel) {
-					existingmode = 1;
+		Con_SafePrintf("No fullscreen display modes found\n");
+		return;
+	}
+
+	SDL_DisplayMode mode;
+	for (int i = 0; i < mode_count; i++)
+	{
+		if (SDL_GetDisplayMode(display_idx, i, &mode) != 0)
+			continue;
+
+			if (mode.format != SDL_PIXELFORMAT_RGBA8888 &&
+				mode.format != SDL_PIXELFORMAT_ARGB8888 &&
+				mode.format != SDL_PIXELFORMAT_RGB888
+				)
+				continue;
+
+			if (mode.w > MAXWIDTH || mode.h > MAXHEIGHT)
+				continue;
+
+			// check duplicates before adding
+			int duplicate = 0;
+			for (int j = 1; j < nummodes; j++)
+			{
+				if (modelist[j].width == mode.w && modelist[j].height == mode.h)
+				{
+					duplicate = 1;
 					break;
 				}
 			}
-			if (!existingmode) {
-				if (nummodes < MAX_MODE_LIST) {
-					modelist[nummodes].type = MS_FULLDIB;
-					modelist[nummodes].width = devmode.dmPelsWidth;
-					modelist[nummodes].height = devmode.dmPelsHeight;
-					modelist[nummodes].bpp = devmode.dmBitsPerPel;
-					modelist[nummodes].fullscreen = 1;
-					modelist[nummodes].dib = 1;
-					modelist[nummodes].modenum = 0;
-					modelist[nummodes].halfscreen = 0;
-					sprintf(modelist[nummodes].modedesc, "%dx%dx%d",
-						devmode.dmPelsWidth, devmode.dmPelsHeight, devmode.dmBitsPerPel);
-					nummodes++;
+
+			// add to existing modelist format
+			if (!duplicate && nummodes < MAX_MODE_LIST)
+			{
+				modelist[nummodes].type = MS_FULLDIB;
+				modelist[nummodes].width = mode.w;
+				modelist[nummodes].height = mode.h;
+				int bpp = 32;
+				switch (mode.format)
+				{
+				case SDL_PIXELFORMAT_RGB888:
+					bpp = 24;
+					break;
+				default:
+					bpp = 32;
+					break;
 				}
+				modelist[nummodes].bpp = bpp;
+				modelist[nummodes].fullscreen = 1;
+				modelist[nummodes].dib = 1;
+				modelist[nummodes].modenum = 0;
+				modelist[nummodes].halfscreen = 0;
+
+				sprintf(modelist[nummodes].modedesc, "%dx%d", mode.w, mode.h);
+				nummodes++;
 			}
-		}
-		modenum++;
 	}
+
 	if (nummodes == 0)
 		Con_SafePrintf("No fullscreen display modes found\n");
 }
@@ -1435,7 +1325,7 @@ void VID_Init8bitPalette()
 	char thePalette[256 * 3];
 	char* oldPalette, * newPalette;
 
-	glColorTableEXT = (void*)wglGetProcAddress("glColorTableEXT");
+	glColorTableEXT = (void*)SDL_GL_GetProcAddress("glColorTableEXT");
 /*
 	if (!glColorTableEXT || strstr(gl_extensions, "GL_EXT_shared_texture_palette") ||
 		COM_CheckParm("-no8bit"))
@@ -1498,7 +1388,6 @@ void	VID_Init(unsigned char* palette)
 	int		basenummodes, width, height, bpp, findbpp, done;
 	byte* ptmp;
 	char	gldir[MAX_OSPATH];
-	HDC		hdc;
 	DEVMODE	devmode;
 
 	memset(&devmode, 0, sizeof(devmode));
@@ -1520,28 +1409,28 @@ void	VID_Init(unsigned char* palette)
 	Cmd_AddCommand("vid_describemode", VID_DescribeMode_f);
 	Cmd_AddCommand("vid_describemodes", VID_DescribeModes_f);
 
-	hIcon = LoadIcon(global_hInstance, MAKEINTRESOURCE(IDI_ICON2));
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_COMPATIBILITY);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 1);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
+	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+	SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
+	SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
+	SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
+	SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8);
+	SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 8);
 
-	InitCommonControls();
+	if (SDL_InitSubSystem(SDL_INIT_VIDEO) != 0)
+		Sys_Error(va("VID_Init: Couldn't load SDL video subsystem: %s", SDL_GetError()));
 
-	VID_InitDIB(global_hInstance);
+	VID_InitDIB();
 	basenummodes = nummodes = 1;
 
-	VID_InitFullDIB(global_hInstance);
+	VID_InitFullDIB();
 
 	if (COM_CheckParm("-window"))
 	{
-		hdc = GetDC(NULL);
-
-		if (GetDeviceCaps(hdc, RASTERCAPS) & RC_PALETTE)
-		{
-			Sys_Error("Can't run in non-RGB mode");
-		}
-
-		ReleaseDC(NULL, hdc);
-
 		windowed = true;
-
 		vid_default = MODE_WINDOWED;
 	}
 	else
@@ -1550,6 +1439,7 @@ void	VID_Init(unsigned char* palette)
 			Sys_Error("No RGB fullscreen modes available");
 
 		windowed = false;
+		vid_default = 1;
 
 		if (COM_CheckParm("-mode"))
 		{
@@ -1716,21 +1606,10 @@ void	VID_Init(unsigned char* palette)
 	vid.colormap = host_colormap;
 	vid.fullbright = 256 - LittleLong(*((int*)vid.colormap + 2048));
 
-	DestroyWindow(hwnd_dialog);
-
 	Check_Gamma(palette);
 	VID_SetPalette(palette);
 
 	VID_SetMode(vid_default, palette);
-
-	maindc = GetDC(mainwindow);
-	bSetupPixelFormat(maindc);
-
-	baseRC = wglCreateContext(maindc);
-	if (!baseRC)
-		Sys_Error("Could not initialize GL (wglCreateContext failed).\n\nMake sure you in are 65535 color mode, and try running -window.");
-	if (!wglMakeCurrent(maindc, baseRC))
-		Sys_Error("wglMakeCurrent failed");
 
 	GL_Init();
 
