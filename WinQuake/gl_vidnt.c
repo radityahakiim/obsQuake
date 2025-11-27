@@ -83,6 +83,9 @@ static int		windowed_mouse;
 extern qboolean	mouseactive;  // from in_win.c
 static HICON	hIcon;
 
+extern int mx_accum;
+extern int my_accum;
+
 int			DIBWidth, DIBHeight;
 RECT		WindowRect;
 DWORD		WindowStyle, ExWindowStyle;
@@ -1005,7 +1008,10 @@ void HandleEvents()
 		}
 			break;
 		case SDL_MOUSEMOTION:
-			IN_MouseMove(event.motion.xrel, event.motion.yrel);
+			if (mouseactive) {
+				mx_accum += event.motion.xrel;
+				my_accum += event.motion.yrel;
+			}
 			break;
 
 		case SDL_MOUSEBUTTONDOWN:

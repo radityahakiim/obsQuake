@@ -429,27 +429,17 @@ void IN_MouseMove(usercmd_t* cmd)
 {
 	if (!mouseactive)
 		return;
-	int mouseButtons;
-	int mx_local = 0, my_local = 0;
 
-	// read relative mouse movement (SDL gives deltas each frame)
-	mouseButtons = SDL_GetRelativeMouseState(&mx_local, &my_local);
-/*
-	// handle mouse buttons
-	for (int i = 0; i < mouse_buttons; i++)
-	{
-		qboolean pressed = (mouseButtons & (1 << i)) != 0;
-		qboolean wasPressed = (mouse_oldbuttonstate & (1 << i)) != 0;
+	int mx_local = 0;
+	int my_local = 0;
 
-		if (pressed && !wasPressed)
-			Key_Event(K_MOUSE1 + i, true);
-		if (!pressed && wasPressed)
-			Key_Event(K_MOUSE1 + i, false);
-	}
+	// consume accumulated deltas coming from SDL events
+	mx_local = mx_accum;
+	my_local = my_accum;
+	// reset accumulators so motion is applied only once
+	mx_accum = 0;
+	my_accum = 0;
 
-	mouse_oldbuttonstate = mouseButtons;
-
-	*/
 	// mouse smoothing
 	if (m_filter.value)
 	{
@@ -468,11 +458,10 @@ void IN_MouseMove(usercmd_t* cmd)
 	// apply sensitivity scaling
 	mouse_x *= sensitivity.value;
 	mouse_y *= sensitivity.value;
-
 	// apply movement to Quake usercmd
 	in_mlook.state = 1; // always mouselook
 
-	if ((in_strafe.state & 1) || (lookstrafe.value && (in_mlook.state & 1)))
+	if (in_strafe.state & 1)
 		cmd->sidemove += m_side.value * mouse_x;
 	else
 		cl.viewangles[YAW] -= m_yaw.value * mouse_x;
@@ -520,20 +509,7 @@ IN_Accumulate
 */
 void IN_Accumulate (void)
 {
-	int		mx, my;
-	HDC	hdc;
 
-	if (mouseactive)
-	{
-		if (!dinput && !use_rawinput)
-		{
-			GetCursorPos (&current_pos);
-			mx_accum += current_pos.x - window_center_x;
-			my_accum += current_pos.y - window_center_y;
-		// force the mouse to the center, so there's room to move
-			SetCursorPos (window_center_x, window_center_y);
-		}
-	}
 }
 
 
