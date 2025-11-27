@@ -340,10 +340,10 @@ int VID_SetMode(int modenum, unsigned char* palette)
 		// mouse behavior
 		if (_windowed_mouse.value && key_dest == key_game)
 		{
-			SDL_SetRelativeMouseMode(SDL_TRUE);
+			IN_ActivateMouse();
 		}
 		else {
-			SDL_SetRelativeMouseMode(SDL_FALSE);
+			IN_DeactivateMouse();
 		}
 	}
 	else if (mode.type == MS_FULLDIB)
@@ -374,7 +374,7 @@ int VID_SetMode(int modenum, unsigned char* palette)
 		{
 			Con_SafePrintf("Warning: SDL_SetWindowFullscreen failed: %s\n", SDL_GetError());
 		}
-		SDL_SetRelativeMouseMode(SDL_TRUE);
+		IN_ActivateMouse();
 	}
 	else
 	{
@@ -722,8 +722,7 @@ void	VID_Shutdown(void)
 	if (modestate == MS_FULLDIB)
 		SDL_SetWindowFullscreen(window, 0);
 
-	SDL_SetRelativeMouseMode(SDL_FALSE);
-	SDL_ShowCursor(SDL_TRUE);
+	IN_DeactivateMouse();
 
 	if (glContext)
 	{
@@ -952,7 +951,7 @@ void AppActivate(const SDL_Event* event)
 		if (modestate == MS_FULLDIB ||
 			(modestate == MS_WINDOWED && _windowed_mouse.value && key_dest == key_game))
 		{
-			SDL_SetRelativeMouseMode(SDL_TRUE);
+			IN_ActivateMouse();
 		}
 
 		ClearAllStates();
@@ -960,7 +959,7 @@ void AppActivate(const SDL_Event* event)
 
 	if (inactive)
 	{
-		SDL_SetRelativeMouseMode(SDL_FALSE);
+		IN_DeactivateMouse();
 		ClearAllStates();
 	}
 }
