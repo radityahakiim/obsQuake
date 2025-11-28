@@ -707,12 +707,51 @@ Draw_ConsoleBackground
 */
 void Draw_ConsoleBackground (int lines)
 {
-	int y = (vid.height * 3) >> 2;
+	glpic_t* gl = (glpic_t*)conback->data;
 
-	if (lines > y)
-		Draw_Pic(0, lines - vid.height, conback);
-	else
-		Draw_AlphaPic (0, lines - vid.height, conback, (float)(1.2 * lines)/y);
+	float screen_w = vid.width;
+	float screen_h = vid.height;
+
+	float con_w = conback->width;
+	float con_h = conback->height;
+
+	// aspect-correct scale factor
+	float scale_x = screen_w / con_w;
+	float scale_y = screen_h / con_h;
+	float scale = (scale_x < scale_y) ? scale_x : scale_y;
+
+	// scaled final size
+	float draw_w = con_w * scale;
+	float draw_h = con_h * scale;
+
+	// center horizontally
+	float draw_x = (screen_w - draw_w) * 0.5f;
+
+	// slide vertically based on console height
+	float draw_y = lines - draw_h;
+
+	// fade alpha logic preserved
+	float yfull = (vid.height * 3) >> 2;
+	float alpha = (lines >= yfull)
+		? 1.0f
+		: ((float)1.2 * lines) / yfull;
+
+	// draw
+	glDisable(GL_ALPHA_TEST);
+	glEnable(GL_BLEND);
+	glColor4f(1, 1, 1, alpha);
+
+	GL_Bind(gl->texnum);
+	glBegin(GL_QUADS);
+	glTexCoord2f(gl->sl, gl->tl); glVertex2f(draw_x,			draw_y);
+	glTexCoord2f(gl->sh, gl->tl); glVertex2f(draw_x + draw_w,	draw_y);
+	glTexCoord2f(gl->sh, gl->th); glVertex2f(draw_x + draw_w,	draw_y + draw_h);
+	glTexCoord2f(gl->sl, gl->th); glVertex2f(draw_x,			draw_y + draw_h);
+	glEnd();
+
+	glColor4f(1, 1, 1, 1);
+	glDisable(GL_BLEND);
+	glEnable(GL_ALPHA_TEST);
 }
 
 
