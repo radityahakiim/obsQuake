@@ -194,7 +194,8 @@ void IN_ShowMouse (void)
 
 	if (!mouseshowtoggle)
 	{
-		ShowCursor (TRUE);
+		// SDL_SetWindowGrab(window, SDL_FALSE);
+		SDL_ShowCursor(SDL_ENABLE);
 		mouseshowtoggle = 1;
 	}
 }
@@ -210,7 +211,7 @@ void IN_HideMouse (void)
 
 	if (mouseshowtoggle)
 	{
-		ShowCursor (FALSE);
+		SDL_ShowCursor(SDL_DISABLE);
 		mouseshowtoggle = 0;
 	}
 }
@@ -231,9 +232,6 @@ void IN_ActivateMouse (void)
 	if (SDL_SetRelativeMouseMode(SDL_TRUE) == 0)
 	{
 		SDL_SetWindowGrab(window, SDL_TRUE);
-		SDL_ShowCursor(SDL_DISABLE);
-
-		Con_SafePrintf("Mouse activated (SDL relative mode)\n");
 	}
 	else
 	{
@@ -272,9 +270,6 @@ void IN_DeactivateMouse (void)
 	// disable relative (captured) mouse input
 	SDL_SetRelativeMouseMode(SDL_FALSE);
 
-	SDL_SetWindowGrab(window, SDL_FALSE);
-	SDL_ShowCursor(SDL_ENABLE);
-
 	mouseactive = false;
 }
 
@@ -294,8 +289,8 @@ void IN_RestoreOriginalMouseState (void)
 
 // try to redraw the cursor so it gets reinitialized, because sometimes it
 // has garbage after the mode switch
-	ShowCursor (TRUE);
-	ShowCursor (FALSE);
+	SDL_ShowCursor(SDL_ENABLE);
+	SDL_ShowCursor(SDL_DISABLE);
 }
 
 /*
