@@ -1968,7 +1968,7 @@ void VID_MenuKey(int key)
 		S_LocalSound("misc/menu1.wav");
 		switch (vid_menuline) {
 		case 0: // video mode
-			if (--vid_current_mode < 0) vid_current_mode = VID_NumModes() - 1;
+			if (++vid_current_mode >= VID_NumModes()) vid_current_mode = 0;
 			VID_CollectRefreshRates(modelist[vid_current_mode].width, modelist[vid_current_mode].height);
 			vid_refresh_index = 0;
 			break;
@@ -1987,7 +1987,7 @@ void VID_MenuKey(int key)
 		S_LocalSound("misc/menu1.wav");
 		switch (vid_menuline) {
 		case 0: // video mode
-			if (++vid_current_mode >= VID_NumModes()) vid_current_mode = 0;
+			if (--vid_current_mode < 0) vid_current_mode = VID_NumModes() - 1;
 			VID_CollectRefreshRates(modelist[vid_current_mode].width, modelist[vid_current_mode].height);
 			vid_refresh_index = 0;
 			break;
