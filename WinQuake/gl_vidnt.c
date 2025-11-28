@@ -614,25 +614,46 @@ void GL_Init(void)
 /*
 =================
 GL_BeginRendering
-
 =================
 */
 void GL_BeginRendering(int* x, int* y, int* width, int* height)
 {
-	extern cvar_t gl_clear;
-
 	int drawable_w, drawable_h;
 	SDL_GL_GetDrawableSize(window, &drawable_w, &drawable_h);
 
-	*x = 0;
-	*y = 0;
-	*width = drawable_w;
-	*height = drawable_h;
+	float target_aspect = (float)vid.width / (float)vid.height;
+	float screen_aspect = (float)drawable_w / (float)drawable_h;
 
-	//    if (!wglMakeCurrent( maindc, baseRC ))
-	//		Sys_Error ("wglMakeCurrent failed");
+	int vp_w, vp_h, vp_x, vp_y;
 
-	//	glViewport (*x, *y, *width, *height);
+	if (fabsf(target_aspect - screen_aspect) < 0.0001f) {
+		// screen is wider
+		vp_x = 0;
+		vp_y = 0;
+		vp_w = drawable_w;
+		vp_h = drawable_h;
+	}
+	else if (screen_aspect > target_aspect) {
+		vp_h = drawable_h;
+		vp_w = (int)(vp_h * target_aspect);
+		vp_x = (drawable_w - vp_w) / 2;
+		vp_y = 0;
+	}
+	else {
+		// screen is taller
+		vp_w = drawable_w;
+		vp_h = (int)(vp_w / target_aspect);
+		vp_x = 0;
+		vp_y = (drawable_h - vp_h) / 2;
+	}
+
+	glViewport(vp_x, vp_y, vp_w, vp_h);
+
+	*x = vp_x;
+	*y = vp_y;
+	*width = vp_w;
+	*height = vp_h;
+
 }
 
 
@@ -1770,22 +1791,26 @@ void VID_ApplyChanges(qboolean permanent) {
 		SDL_SetWindowSize(window, w, h);
 		SDL_SetWindowDisplayMode(window, NULL); // reset to desktop
 
-		Uint32 flags = 0;
 		if (fs_mode == 0) { // windowed
-			flags = 0;
 			SDL_SetWindowFullscreen(window, 0);
+			SDL_SetWindowDisplayMode(window, NULL);
+			SDL_SetWindowSize(window, w, h);
 			SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
 		}
 		else if (fs_mode == 1) { // borderless
-			flags = SDL_WINDOW_FULLSCREEN_DESKTOP;
-			SDL_SetWindowFullscreen(window, flags);
+			SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN_DESKTOP);
 		}
 		else { // exclusive fullscreen
 			SDL_DisplayMode dm;
-			SDL_GetDesktopDisplayMode(0, &dm);
+			memset(&dm, 0, sizeof(dm));
+			dm.w = w;
+			dm.h = h;
 			dm.refresh_rate = refresh;
+			dm.format = SDL_PIXELFORMAT_RGB888;
 			SDL_SetWindowDisplayMode(window, &dm);
 			SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN);
+			SDL_MinimizeWindow(window); // reactivate window to fix cropped resolution issues
+			SDL_RestoreWindow(window);
 		}
 
 		// vsync
@@ -1809,27 +1834,30 @@ void VID_ApplyChanges(qboolean permanent) {
 	// fullscreen
 	if (fs_mode == 0) { // windowed
 		SDL_SetWindowFullscreen(window, 0);
+		SDL_SetWindowDisplayMode(window, NULL);
+		SDL_SetWindowSize(window, w, h);
 		SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
 	}
 	else if (fs_mode == 1) { // borderless
+		SDL_SetWindowDisplayMode(window, NULL);
 		SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN_DESKTOP);
 	}
 	else { // exclusive fullscreen
 		SDL_DisplayMode dm;
-		SDL_GetDesktopDisplayMode(0, &dm);
+		memset(&dm, 0, sizeof(dm));
+		dm.w = w;
+		dm.h = h;
 		dm.refresh_rate = refresh;
 		SDL_SetWindowDisplayMode(window, &dm);
 		SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN);
+		SDL_MinimizeWindow(window); // reactivate window to fix cropped resolution issues
+		SDL_RestoreWindow(window);
 	}
 
 	// vsync
 	SDL_GL_SetSwapInterval(vsync ? 1 : 0);
 
 	// update vid
-	DIBWidth = w;
-	DIBHeight = h;
-	WindowRect.right = w;
-	WindowRect.bottom = h;
 	vid.width = w;
 	vid.height = h;
 	vid.rowbytes = w * 4;
@@ -1837,22 +1865,6 @@ void VID_ApplyChanges(qboolean permanent) {
 	vid.conheight = min(vid.conheight, h);
 
 	vid.recalc_refdef = 1;
-
-	// centering
-	int drawable_w = 0, drawable_h = 0;
-
-	float scale_x = (float)drawable_w / (float)w;
-	float scale_y = (float)drawable_h / (float)h;
-	float scale = (scale_x < scale_y) ? scale_x : scale_y;
-
-	// calculate centered viewport
-	int vp_w = (int)(w * scale);
-	int vp_h = (int)(h * scale);
-	int vp_x = (drawable_w - vp_w) / 2;
-	int vp_y = (drawable_h - vp_h) / 2;
-
-	// resize viewport
-	glViewport(vp_x, vp_y, vp_w, vp_h);
 
 	// update window status
 	VID_UpdateWindowStatus();
@@ -1918,26 +1930,26 @@ void VID_MenuDraw(void)
 	pv = VID_GetModePtr(vid_current_mode);
 	sprintf(temp, "          %dx%d", pv->width, pv->height);
 	M_Print(12 * 8, 36 + 0 * 8, temp);
-	if (vid_menuline == 0) M_DrawCharacter(11 * 8, 36 + 0 * 8, 12 + ((int)(realtime * 4) & 1));
+	if (vid_menuline == 0) M_DrawCharacter(2 * 8 - 8, 36 + 0 * 8, 12 + ((int)(realtime * 4) & 1));
 
 	M_Print(2 * 8, 36 + 1 * 8, "Refresh Rate");
 	int cur_refresh = (vid_num_refresh > 0) ? vid_refresh_rates[vid_refresh_index] : 60;
 	sprintf(temp, "          %d Hz", cur_refresh);
 	M_Print(12 * 8, 36 + 1 * 8, temp);
-	if (vid_menuline == 1) M_DrawCharacter(11 * 8, 36 + 1 * 8, 12 + ((int)(realtime * 4) & 1));
+	if (vid_menuline == 1) M_DrawCharacter(2 * 8 - 8, 36 + 1 * 8, 12 + ((int)(realtime * 4) & 1));
 
 	M_Print(2 * 8, 36 + 2 * 8, "Vertical Sync");
 	sprintf(temp, "          %s", (int)vid_vsync.value ? "On" : "Off");
 	M_Print(12 * 8, 36 + 2 * 8, temp);
-	if (vid_menuline == 2) M_DrawCharacter(11 * 8, 36 + 2 * 8, 12 + ((int)(realtime * 4) & 1));
+	if (vid_menuline == 2) M_DrawCharacter(2 * 8 - 8, 36 + 2 * 8, 12 + ((int)(realtime * 4) & 1));
 
 	M_Print(2 * 8, 36 + 3 * 8, "Fullscreen");
 	const char* fs_str[] = { "Off", "Borderless", "On" };
 	sprintf(temp, "          %s", fs_str[(int)vid_fullscreen_mode.value]);
 	M_Print(12 * 8, 36 + 3 * 8, temp);
-	if (vid_menuline == 3) M_DrawCharacter(11 * 8, 36 + 3 * 8, 12 + ((int)(realtime * 4) & 1));
+	if (vid_menuline == 3) M_DrawCharacter(2 * 8 - 8, 36 + 3 * 8, 12 + ((int)(realtime * 4) & 1));
 
-	M_Print(12 * 8, 36 + 5 * 8, "Test Changes");
+	M_Print(2 * 8, 36 + 5 * 8, "Test Changes");
 	if (vid_menuline == 4) M_DrawCharacter(2 * 8 - 8, 36 + 5 * 8, 12 + ((int)(realtime * 4) & 1));
 
 	M_Print(2 * 8, 36 + 6 * 8, "Apply Changes");
