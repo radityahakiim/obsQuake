@@ -151,10 +151,10 @@ static qboolean vid_test_active = false;
 static double vid_test_start = 0.0;
 static double vid_test_duration = 15.0; // 15 seconds
 
-static int orig_width = 0, orig_height = 0;
-static int orig_refresh = 60;
-static int orig_vsync = 1; // default on
-static int orig_fullscreen = 2; // 2 = exclusive fullscreen
+static int prev_width = 0, prev_height = 0;
+static int prev_refresh = 60;
+static int prev_vsync = 1; // default on
+static int prev_fullscreen = 2; // 2 = exclusive fullscreen
 
 //====================================
 
@@ -1476,16 +1476,16 @@ void	VID_Init(unsigned char* palette)
 	// detect defaults on init
 	SDL_DisplayMode desktop;
 	if (SDL_GetDesktopDisplayMode(0, &desktop) == 0) {
-		orig_width = desktop.w;
-		orig_height = desktop.h;
-		orig_refresh = (desktop.refresh_rate > 0) ? desktop.refresh_rate : 60;
+		prev_width = desktop.w;
+		prev_height = desktop.h;
+		prev_refresh = (desktop.refresh_rate > 0) ? desktop.refresh_rate : 60;
 	}
-	orig_vsync = 1;
-	orig_fullscreen = 2;
+	prev_vsync = 1;
+	prev_fullscreen = 2;
 
-	Cvar_SetValue("vid_refreshrate", (float)orig_refresh);
-	Cvar_SetValue("vid_vsync", (float)orig_vsync);
-	Cvar_SetValue("vid_fullscreen_mode", (float)orig_fullscreen);
+	Cvar_SetValue("vid_refreshrate", (float)prev_refresh);
+	Cvar_SetValue("vid_vsync", (float)prev_vsync);
+	Cvar_SetValue("vid_fullscreen_mode", (float)prev_fullscreen);
 
 	VID_InitDIB();
 	basenummodes = nummodes = 1;
@@ -1764,10 +1764,10 @@ void VID_CollectRefreshRates(int target_w, int target_h) {
 			}
 		}
 	}
-	// set current index to match orig_refresh
+	// set current index to match prev_refresh
 	vid_refresh_index = 0;
 	for (int i = 0; i < vid_num_refresh; i++) {
-		if (vid_refresh_rates[i] == orig_refresh) {
+		if (vid_refresh_rates[i] == prev_refresh) {
 			vid_refresh_index = i;
 			break;
 		}
@@ -1783,18 +1783,14 @@ VID_ApplyChanges
 void VID_ApplyChanges(qboolean permanent) {
 	if (vid_test_active && !permanent) {
 		// revert test
-		int w = orig_width, h = orig_height;
-		int refresh = orig_refresh;
-		int fs_mode = orig_fullscreen;
-		int vsync = orig_vsync;
+		int w = prev_width, h = prev_height;
+		int refresh = prev_refresh;
+		int fs_mode = prev_fullscreen;
+		int vsync = prev_vsync;
 
 		SDL_SetWindowSize(window, w, h);
-		SDL_SetWindowDisplayMode(window, NULL); // reset to desktop
-
 		if (fs_mode == 0) { // windowed
 			SDL_SetWindowFullscreen(window, 0);
-			SDL_SetWindowDisplayMode(window, NULL);
-			SDL_SetWindowSize(window, w, h);
 			SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
 		}
 		else if (fs_mode == 1) { // borderless
@@ -1806,7 +1802,6 @@ void VID_ApplyChanges(qboolean permanent) {
 			dm.w = w;
 			dm.h = h;
 			dm.refresh_rate = refresh;
-			dm.format = SDL_PIXELFORMAT_RGB888;
 			SDL_SetWindowDisplayMode(window, &dm);
 			SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN);
 			SDL_MinimizeWindow(window); // reactivate window to fix cropped resolution issues
@@ -1815,6 +1810,14 @@ void VID_ApplyChanges(qboolean permanent) {
 
 		// vsync
 		SDL_GL_SetSwapInterval(vsync ? 1 : 0);
+		// restore
+		vid.width = w;
+		vid.height = h;
+		vid.rowbytes = w * 4;
+		vid.conwidth = min(vid.conwidth, w);
+		vid.conheight = min(vid.conheight, h);
+		vid.recalc_refdef = 1;
+		VID_UpdateWindowStatus();
 
 		vid_test_active = false;
 		Con_Printf("Video changes reverted.\n");
@@ -1876,6 +1879,13 @@ void VID_ApplyChanges(qboolean permanent) {
 		Cvar_SetValue("vid_vsync", (float)vsync);
 		Cvar_SetValue("vid_fullscreen_mode", (float)fs_mode);
 		Con_Printf("Video changes applied permanently.\n");
+
+		// save into previous
+		prev_width = vid.width;
+		prev_height = vid.height;
+		prev_refresh = refresh;
+		prev_fullscreen = fs_mode;
+		prev_vsync = vsync;
 	}
 	else {
 		vid_test_active = true;
@@ -1903,17 +1913,17 @@ void VID_MenuDraw(void)
 	// store originals on first entry
 	static qboolean first_entry = true;
 	if (first_entry) {
-		orig_width = vid.width;
-		orig_height = vid.height;
-		orig_refresh = (vid_refreshrate.value > 0) ? (int)vid_refreshrate.value : 60;
-		orig_vsync = (int)vid_vsync.value;
-		orig_fullscreen = (int)vid_fullscreen_mode.value;
+		prev_width = vid.width;
+		prev_height = vid.height;
+		prev_refresh = (vid_refreshrate.value > 0) ? (int)vid_refreshrate.value : 60;
+		prev_vsync = (int)vid_vsync.value;
+		prev_fullscreen = (int)vid_fullscreen_mode.value;
 		first_entry = false;
 
 		// find current mode index
 		for (vid_current_mode = 0; vid_current_mode < lnummodes; vid_current_mode++) {
 			pv = VID_GetModePtr(vid_current_mode);
-			if (pv->width == orig_width && pv->height == orig_height) break;
+			if (pv->width == prev_width && pv->height == prev_height) break;
 		}
 		if (vid_current_mode >= lnummodes) vid_current_mode = 0;
 		
