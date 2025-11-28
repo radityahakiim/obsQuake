@@ -140,6 +140,22 @@ qboolean is8bit = false;
 qboolean isPermedia = false;
 qboolean gl_mtexable = false;
 
+// video menu state
+static int vid_menuline = 0;
+static int vid_nummodes = 0;
+static int vid_refresh_rates[32];
+static int vid_num_refresh = 0;
+static int vid_refresh_index = 0;
+static int vid_current_mode = 0; // current selection of mode
+static qboolean vid_test_active = false;
+static double vid_test_start = 0.0;
+static double vid_test_duration = 15.0; // 15 seconds
+
+static int orig_width = 0, orig_height = 0;
+static int orig_refresh = 60;
+static int orig_vsync = 1; // default on
+static int orig_fullscreen = 2; // 2 = exclusive fullscreen
+
 //====================================
 
 cvar_t		vid_mode = { "vid_mode","0", false };
@@ -154,6 +170,9 @@ cvar_t		vid_config_x = { "vid_config_x","800", true };
 cvar_t		vid_config_y = { "vid_config_y","600", true };
 cvar_t		vid_stretch_by_2 = { "vid_stretch_by_2","1", true };
 cvar_t		_windowed_mouse = { "_windowed_mouse","1", true };
+cvar_t		vid_refreshrate = {"vid_refreshrate", "0", true};
+cvar_t		vid_vsync = { "vid_vsync", "1", true };
+cvar_t		vid_fullscreen_mode = { "vid_fullscreen_mode", "2", true };
 
 int			window_center_x, window_center_y, window_x, window_y, window_width, window_height;
 RECT		window_rect;
@@ -344,9 +363,11 @@ int VID_SetMode(int modenum, unsigned char* palette)
 		if (_windowed_mouse.value && key_dest == key_game)
 		{
 			IN_ActivateMouse();
+			IN_HideMouse();
 		}
 		else {
 			IN_DeactivateMouse();
+			IN_ShowMouse();
 		}
 	}
 	else if (mode.type == MS_FULLDIB)
@@ -378,6 +399,7 @@ int VID_SetMode(int modenum, unsigned char* palette)
 			Con_SafePrintf("Warning: SDL_SetWindowFullscreen failed: %s\n", SDL_GetError());
 		}
 		IN_ActivateMouse();
+		IN_HideMouse();
 	}
 	else
 	{
@@ -599,9 +621,13 @@ void GL_BeginRendering(int* x, int* y, int* width, int* height)
 {
 	extern cvar_t gl_clear;
 
-	*x = *y = 0;
-	*width = WindowRect.right - WindowRect.left;
-	*height = WindowRect.bottom - WindowRect.top;
+	int drawable_w, drawable_h;
+	SDL_GL_GetDrawableSize(window, &drawable_w, &drawable_h);
+
+	*x = 0;
+	*y = 0;
+	*width = drawable_w;
+	*height = drawable_h;
 
 	//    if (!wglMakeCurrent( maindc, baseRC ))
 	//		Sys_Error ("wglMakeCurrent failed");
@@ -615,28 +641,19 @@ void GL_EndRendering(void)
 	if (!scr_skipupdate || block_drawing)
 		SDL_GL_SwapWindow(window);
 
-	// handle the mouse state when windowed if that's changed
-	if (modestate == MS_WINDOWED)
-	{
-		if (!_windowed_mouse.value) {
-			if (windowed_mouse) {
-				IN_DeactivateMouse();
-				IN_ShowMouse();
-				windowed_mouse = false;
-			}
+	if (key_dest != key_game) {
+		if (mouseactive) {
+			IN_DeactivateMouse();
 		}
-		else {
-			windowed_mouse = true;
-			if (key_dest == key_game && !mouseactive && ActiveApp) {
-				IN_ActivateMouse();
-				IN_HideMouse();
-			}
-			else if (mouseactive && key_dest != key_game) {
-				IN_DeactivateMouse();
-				IN_ShowMouse();
-			}
-		}
+		IN_ShowMouse();
 	}
+	else {
+		if (!mouseactive && ActiveApp) {
+			IN_ActivateMouse();
+		}
+		IN_HideMouse();
+	}
+
 	if (fullsbardraw)
 		Sbar_Changed();
 }
@@ -955,6 +972,7 @@ void AppActivate(const SDL_Event* event)
 			(modestate == MS_WINDOWED && _windowed_mouse.value && key_dest == key_game))
 		{
 			IN_ActivateMouse();
+			IN_HideMouse();
 		}
 
 		ClearAllStates();
@@ -963,6 +981,7 @@ void AppActivate(const SDL_Event* event)
 	if (inactive)
 	{
 		IN_DeactivateMouse();
+		IN_ShowMouse();
 		ClearAllStates();
 	}
 }
@@ -991,11 +1010,13 @@ void HandleEvents()
 			case SDL_WINDOWEVENT_RESTORED:
 				ActiveApp = true;
 				IN_ActivateMouse();
+				IN_HideMouse();
 				break;
 			case SDL_WINDOWEVENT_FOCUS_LOST:
 			case SDL_WINDOWEVENT_MINIMIZED:
 				ActiveApp = false;
 				IN_DeactivateMouse();
+				IN_ShowMouse();
 				break;
 			}
 			break;
@@ -1408,6 +1429,9 @@ void	VID_Init(unsigned char* palette)
 	Cvar_RegisterVariable(&vid_stretch_by_2);
 	Cvar_RegisterVariable(&_windowed_mouse);
 	Cvar_RegisterVariable(&gl_ztrick);
+	Cvar_RegisterVariable(&vid_refreshrate);
+	Cvar_RegisterVariable(&vid_vsync);
+	Cvar_RegisterVariable(&vid_fullscreen_mode);
 
 	Cmd_AddCommand("vid_nummodes", VID_NumModes_f);
 	Cmd_AddCommand("vid_describecurrentmode", VID_DescribeCurrentMode_f);
@@ -1427,6 +1451,20 @@ void	VID_Init(unsigned char* palette)
 
 	if (SDL_InitSubSystem(SDL_INIT_VIDEO) != 0)
 		Sys_Error(va("VID_Init: Couldn't load SDL video subsystem: %s", SDL_GetError()));
+
+	// detect defaults on init
+	SDL_DisplayMode desktop;
+	if (SDL_GetDesktopDisplayMode(0, &desktop) == 0) {
+		orig_width = desktop.w;
+		orig_height = desktop.h;
+		orig_refresh = (desktop.refresh_rate > 0) ? desktop.refresh_rate : 60;
+	}
+	orig_vsync = 1;
+	orig_fullscreen = 2;
+
+	Cvar_SetValue("vid_refreshrate", (float)orig_refresh);
+	Cvar_SetValue("vid_vsync", (float)orig_vsync);
+	Cvar_SetValue("vid_fullscreen_mode", (float)orig_fullscreen);
 
 	VID_InitDIB();
 	basenummodes = nummodes = 1;
@@ -1665,75 +1703,251 @@ static modedesc_t	modedescs[MAX_MODEDESCS];
 
 /*
 ================
+VID_CollectRefreshRates
+================
+*/
+
+void VID_CollectRefreshRates(int target_w, int target_h) {
+	int display = 0; // primary display
+	int num_display_modes = SDL_GetNumDisplayModes(display);
+	int rates[32] = { 0 };
+	int num_rates = 0;
+	SDL_DisplayMode dm;
+
+	vid_num_refresh = 0;
+	if (num_display_modes <= 0) return;
+	for (int i = 0; i < num_display_modes && num_rates < 32; i++) {
+		if (SDL_GetDisplayMode(display, i, &dm) != 0) continue;
+		if (dm.w == target_w && dm.h == target_h && dm.refresh_rate > 0) {
+			// check for duplicates
+			qboolean dup = false;
+			for (int j = 0; j < num_rates; j++) {
+				if (rates[j] == dm.refresh_rate) {
+					dup = true;
+					break;
+				}
+			}
+			if (!dup) {
+				rates[num_rates++] = dm.refresh_rate;
+				vid_refresh_rates[vid_num_refresh++] = dm.refresh_rate;
+			}
+		}
+	}
+	// sort ascending
+	for (int i = 0; i < vid_num_refresh - 1; i++) {
+		for (int j = 0; j < vid_num_refresh - i - 1; j++) {
+			if (vid_refresh_rates[j] > vid_refresh_rates[j + 1]) {
+				int temp = vid_refresh_rates[j];
+				vid_refresh_rates[j] = vid_refresh_rates[j + 1];
+				vid_refresh_rates[j + 1] = temp;
+			}
+		}
+	}
+	// set current index to match orig_refresh
+	vid_refresh_index = 0;
+	for (int i = 0; i < vid_num_refresh; i++) {
+		if (vid_refresh_rates[i] == orig_refresh) {
+			vid_refresh_index = i;
+			break;
+		}
+	}
+}
+
+/*
+================
+VID_ApplyChanges
+================
+*/
+
+void VID_ApplyChanges(qboolean permanent) {
+	if (vid_test_active && !permanent) {
+		// revert test
+		int w = orig_width, h = orig_height;
+		int refresh = orig_refresh;
+		int fs_mode = orig_fullscreen;
+		int vsync = orig_vsync;
+
+		SDL_SetWindowSize(window, w, h);
+		SDL_SetWindowDisplayMode(window, NULL); // reset to desktop
+
+		Uint32 flags = 0;
+		if (fs_mode == 0) { // windowed
+			flags = 0;
+			SDL_SetWindowFullscreen(window, 0);
+			SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
+		}
+		else if (fs_mode == 1) { // borderless
+			flags = SDL_WINDOW_FULLSCREEN_DESKTOP;
+			SDL_SetWindowFullscreen(window, flags);
+		}
+		else { // exclusive fullscreen
+			SDL_DisplayMode dm;
+			SDL_GetDesktopDisplayMode(0, &dm);
+			dm.refresh_rate = refresh;
+			SDL_SetWindowDisplayMode(window, &dm);
+			SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN);
+		}
+
+		// vsync
+		SDL_GL_SetSwapInterval(vsync ? 1 : 0);
+
+		vid_test_active = false;
+		Con_Printf("Video changes reverted.\n");
+		return;
+	}
+
+	// apply selected
+	vmode_t* pmode = &modelist[vid_current_mode];
+	int w = pmode->width, h = pmode->height;
+	int refresh = (vid_num_refresh > 0) ? vid_refresh_rates[vid_refresh_index] : 60;
+	int fs_mode = vid_fullscreen_mode.value; // cvar fs
+	int vsync = vid_vsync.value;
+
+	// resize window
+	SDL_SetWindowSize(window, w, h);
+	
+	// fullscreen
+	if (fs_mode == 0) { // windowed
+		SDL_SetWindowFullscreen(window, 0);
+		SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
+	}
+	else if (fs_mode == 1) { // borderless
+		SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN_DESKTOP);
+	}
+	else { // exclusive fullscreen
+		SDL_DisplayMode dm;
+		SDL_GetDesktopDisplayMode(0, &dm);
+		dm.refresh_rate = refresh;
+		SDL_SetWindowDisplayMode(window, &dm);
+		SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN);
+	}
+
+	// vsync
+	SDL_GL_SetSwapInterval(vsync ? 1 : 0);
+
+	// update vid
+	DIBWidth = w;
+	DIBHeight = h;
+	WindowRect.right = w;
+	WindowRect.bottom = h;
+	vid.width = w;
+	vid.height = h;
+	vid.rowbytes = w * 4;
+	vid.conwidth = min(vid.conwidth, w);
+	vid.conheight = min(vid.conheight, h);
+
+	vid.recalc_refdef = 1;
+
+	// centering
+	int drawable_w = 0, drawable_h = 0;
+
+	float scale_x = (float)drawable_w / (float)w;
+	float scale_y = (float)drawable_h / (float)h;
+	float scale = (scale_x < scale_y) ? scale_x : scale_y;
+
+	// calculate centered viewport
+	int vp_w = (int)(w * scale);
+	int vp_h = (int)(h * scale);
+	int vp_x = (drawable_w - vp_w) / 2;
+	int vp_y = (drawable_h - vp_h) / 2;
+
+	// resize viewport
+	glViewport(vp_x, vp_y, vp_w, vp_h);
+
+	// update window status
+	VID_UpdateWindowStatus();
+
+	if (permanent) {
+		// save cvar
+		Cvar_SetValue("vid_mode", (float)vid_current_mode);
+		Cvar_SetValue("vid_refreshrate", (float)refresh);
+		Cvar_SetValue("vid_vsync", (float)vsync);
+		Cvar_SetValue("vid_fullscreen_mode", (float)fs_mode);
+		Con_Printf("Video changes applied permanently.\n");
+	}
+	else {
+		vid_test_active = true;
+		vid_test_start = realtime;
+		Con_Printf("Testing video changes for %.0f seconds...\n", vid_test_duration);
+	}
+
+}
+
+/*
+================
 VID_MenuDraw
 ================
 */
 void VID_MenuDraw(void)
 {
 	qpic_t* p;
-	char* ptr;
-	int			lnummodes, i, j, k, column, row, dup, dupmode;
+	int			lnummodes = VID_NumModes();
 	char		temp[100];
 	vmode_t* pv;
 
 	p = Draw_CachePic("gfx/vidmodes.lmp");
 	M_DrawPic((320 - p->width) / 2, 4, p);
 
-	vid_wmodes = 0;
-	lnummodes = VID_NumModes();
+	// store originals on first entry
+	static qboolean first_entry = true;
+	if (first_entry) {
+		orig_width = vid.width;
+		orig_height = vid.height;
+		orig_refresh = (vid_refreshrate.value > 0) ? (int)vid_refreshrate.value : 60;
+		orig_vsync = (int)vid_vsync.value;
+		orig_fullscreen = (int)vid_fullscreen_mode.value;
+		first_entry = false;
 
-	for (i = 1; (i < lnummodes) && (vid_wmodes < MAX_MODEDESCS); i++)
-	{
-		ptr = VID_GetModeDescription(i);
-		pv = VID_GetModePtr(i);
-
-		k = vid_wmodes;
-
-		modedescs[k].modenum = i;
-		modedescs[k].desc = ptr;
-		modedescs[k].iscur = 0;
-
-		if (i == vid_modenum)
-			modedescs[k].iscur = 1;
-
-		vid_wmodes++;
-
-	}
-
-	if (vid_wmodes > 0)
-	{
-		M_Print(2 * 8, 36 + 0 * 8, "Fullscreen Modes (WIDTHxHEIGHTxBPP)");
-
-		column = 8;
-		row = 36 + 2 * 8;
-
-		for (i = 0; i < vid_wmodes; i++)
-		{
-			if (modedescs[i].iscur)
-				M_PrintWhite(column, row, modedescs[i].desc);
-			else
-				M_Print(column, row, modedescs[i].desc);\
-				if (i == vid_line)
-					M_DrawCharacter(column - 8, row, 12 + ((int)(realtime * 4) & 1));
-
-			column += 13 * 8;
-
-			if ((i % VID_ROW_SIZE) == (VID_ROW_SIZE - 1))
-			{
-				column = 8;
-				row += 8;
-			}
+		// find current mode index
+		for (vid_current_mode = 0; vid_current_mode < lnummodes; vid_current_mode++) {
+			pv = VID_GetModePtr(vid_current_mode);
+			if (pv->width == orig_width && pv->height == orig_height) break;
 		}
+		if (vid_current_mode >= lnummodes) vid_current_mode = 0;
+		
+		VID_CollectRefreshRates(modelist[vid_current_mode].width, modelist[vid_current_mode].height);
+		first_entry = false;
 	}
 
-	M_Print(3 * 8, 36 + MODE_AREA_HEIGHT * 8 + 8 * 2,
-		"Video modes can be set in here.");
-	M_Print(3 * 8, 36 + MODE_AREA_HEIGHT * 8 + 8 * 3,
-		"Make sure you save the game");
-	M_Print(3 * 8, 36 + MODE_AREA_HEIGHT * 8 + 8 * 4,
-		"before changing the game resolution.");
-	M_Print(3 * 8, 36 + MODE_AREA_HEIGHT * 8 + 8 * 6,
-		"The game restarts itself every mode change.");
+	if (vid_test_active && (realtime - vid_test_start > vid_test_duration)) {
+		VID_ApplyChanges(false); // revert
+	}
+
+	// draw options
+	M_Print(2 * 8, 36 + 0 * 8, "Video Mode");
+	pv = VID_GetModePtr(vid_current_mode);
+	sprintf(temp, "          %dx%d", pv->width, pv->height);
+	M_Print(12 * 8, 36 + 0 * 8, temp);
+	if (vid_menuline == 0) M_DrawCharacter(11 * 8, 36 + 0 * 8, 12 + ((int)(realtime * 4) & 1));
+
+	M_Print(2 * 8, 36 + 1 * 8, "Refresh Rate");
+	int cur_refresh = (vid_num_refresh > 0) ? vid_refresh_rates[vid_refresh_index] : 60;
+	sprintf(temp, "          %d Hz", cur_refresh);
+	M_Print(12 * 8, 36 + 1 * 8, temp);
+	if (vid_menuline == 1) M_DrawCharacter(11 * 8, 36 + 1 * 8, 12 + ((int)(realtime * 4) & 1));
+
+	M_Print(2 * 8, 36 + 2 * 8, "Vertical Sync");
+	sprintf(temp, "          %s", (int)vid_vsync.value ? "On" : "Off");
+	M_Print(12 * 8, 36 + 2 * 8, temp);
+	if (vid_menuline == 2) M_DrawCharacter(11 * 8, 36 + 2 * 8, 12 + ((int)(realtime * 4) & 1));
+
+	M_Print(2 * 8, 36 + 3 * 8, "Fullscreen");
+	const char* fs_str[] = { "Off", "Borderless", "On" };
+	sprintf(temp, "          %s", fs_str[(int)vid_fullscreen_mode.value]);
+	M_Print(12 * 8, 36 + 3 * 8, temp);
+	if (vid_menuline == 3) M_DrawCharacter(11 * 8, 36 + 3 * 8, 12 + ((int)(realtime * 4) & 1));
+
+	M_Print(12 * 8, 36 + 5 * 8, "Test Changes");
+	if (vid_menuline == 4) M_DrawCharacter(2 * 8 - 8, 36 + 5 * 8, 12 + ((int)(realtime * 4) & 1));
+
+	M_Print(2 * 8, 36 + 6 * 8, "Apply Changes");
+	if (vid_menuline == 5) M_DrawCharacter(2 * 8 - 8, 36 + 6 * 8, 12 + ((int)(realtime * 4) & 1));
+
+	if (vid_test_active) {
+		int remain = (int)(vid_test_duration - (realtime - vid_test_start));
+		sprintf(temp, "Test active: %d sec remaining", remain);
+		M_Print(2 * 8, 36 + 8 * 8, temp);
+	}
 }
 
 
@@ -1744,7 +1958,6 @@ VID_MenuKey
 */
 void VID_MenuKey(int key)
 {
-	int ln = vid_wmodes;
 	switch (key)
 	{
 	case K_ESCAPE:
@@ -1753,44 +1966,61 @@ void VID_MenuKey(int key)
 		break;
 	case K_LEFTARROW:
 		S_LocalSound("misc/menu1.wav");
-		vid_line--;
-		if (vid_line < 0) vid_line = ln - 1;
+		switch (vid_menuline) {
+		case 0: // video mode
+			if (--vid_current_mode < 0) vid_current_mode = VID_NumModes() - 1;
+			VID_CollectRefreshRates(modelist[vid_current_mode].width, modelist[vid_current_mode].height);
+			vid_refresh_index = 0;
+			break;
+		case 1: // refresh rate
+			if (vid_num_refresh > 0 && --vid_refresh_index < 0) vid_refresh_index = vid_num_refresh - 1;
+			break;
+		case 2: // vsync
+			vid_vsync.value = !vid_vsync.value;
+			break;
+		case 3: // fullscreen
+			if (--vid_fullscreen_mode.value < 0) vid_fullscreen_mode.value = 2;
+			break;
+		}
 		break;
 	case K_RIGHTARROW:
 		S_LocalSound("misc/menu1.wav");
-		vid_line++;
-		if (vid_line >= ln) vid_line = 0;
+		switch (vid_menuline) {
+		case 0: // video mode
+			if (++vid_current_mode >= VID_NumModes()) vid_current_mode = 0;
+			VID_CollectRefreshRates(modelist[vid_current_mode].width, modelist[vid_current_mode].height);
+			vid_refresh_index = 0;
+			break;
+		case 1: // refresh rate
+			if (vid_num_refresh > 0 && ++vid_refresh_index >= vid_num_refresh) vid_refresh_index = 0;
+			break;
+		case 2: // vsync
+			vid_vsync.value = !vid_vsync.value;
+			break;
+		case 3: // fullscreen
+			if (++vid_fullscreen_mode.value > 2) vid_fullscreen_mode.value = 0;
+			break;
+		}
 		break;
 	case K_UPARROW:
 		S_LocalSound("misc/menu1.wav");
-		vid_line -= VID_ROW_SIZE;
-		if (vid_line < 0)
-			vid_line = (((ln - 1) / VID_ROW_SIZE) * VID_ROW_SIZE) + (vid_line + VID_ROW_SIZE);
-		if (vid_line >= ln) vid_line = ln - 1;
+		vid_menuline--;
+		if (vid_menuline < 0) vid_menuline = 5;
 		break;
 	case K_DOWNARROW:
 		S_LocalSound("misc/menu1.wav");
-		vid_line += VID_ROW_SIZE;
-		if (vid_line >= ln) vid_line = vid_line % VID_ROW_SIZE;
-		if (vid_line >= ln) vid_line = ln - 1;
+		vid_menuline++;
+		if (vid_menuline > 5) vid_menuline = 0;
 		break;
 	case K_ENTER:
 	{
-		// apply selected mode and restart with -mode <modenum>
-		int sel = modedescs[vid_line].modenum;
-		if (sel <= 0) break;
-
 		S_LocalSound("misc/menu2.wav");
-
-		// set cvar so config reflects selection
-		Cvar_SetValue("vid_mode", (float)sel);
-
-		// ask command buffer to set vid_mode (keep behaviour consistent)
-		Cbuf_AddText(va("vid_mode %d\n", sel));
-
-		// restart the game to apply settings
-		Con_SafePrintf("Restarting to apply video mode %s ...\n", VID_GetModeDescription(sel));
-		Sys_RestartWithMode(sel);
+		if (vid_menuline == 4) {
+			VID_ApplyChanges(false); // test changes
+		}
+		else if (vid_menuline == 5) {
+			VID_ApplyChanges(true);
+		}
 		break;
 	}
 	default:
