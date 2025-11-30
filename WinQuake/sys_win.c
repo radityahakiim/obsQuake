@@ -503,21 +503,22 @@ Sys_DoubleTime
 */
 double Sys_DoubleTime (void)
 {
-	static LARGE_INTEGER freq;
-	static LARGE_INTEGER start;
-	static qboolean init = FALSE;
-	LARGE_INTEGER now;
+	static Uint64 freq = 0;
+	static Uint64 start = 0;
+	static SDL_bool init = SDL_FALSE;
+	Uint64 now;
 
 	if (!init)
 	{
-		if (!QueryPerformanceFrequency(&freq))
+		freq = SDL_GetPerformanceFrequency();
+		if (freq == 0)
 			Sys_Error("No high-resolution performance counter available");
-		QueryPerformanceCounter(&start);
-		init = TRUE;
+		start = SDL_GetPerformanceCounter();
+		init = SDL_TRUE;
 		return 0.0;
 	}
-	QueryPerformanceCounter(&now);
-	return (double)(now.QuadPart - start.QuadPart) / (double)freq.QuadPart;
+	now = SDL_GetPerformanceCounter();
+	return (double)(now - start) / (double)freq;
 }
 
 
