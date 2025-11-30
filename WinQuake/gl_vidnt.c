@@ -1936,39 +1936,50 @@ void VID_MenuDraw(void)
 	}
 
 	// draw options
-	M_Print(2 * 8, 36 + 0 * 8, "Video Mode");
+	int y = 32;
+	const int x_label = 16;
+	const int x_value = 220;
+	const int x_cursor = 200;
+
+	M_Print(x_label, y, "          Video Mode");
 	pv = VID_GetModePtr(vid_current_mode);
-	sprintf(temp, "          %dx%d", pv->width, pv->height);
-	M_Print(12 * 8, 36 + 0 * 8, temp);
-	if (vid_menuline == 0) M_DrawCharacter(2 * 8 - 8, 36 + 0 * 8, 12 + ((int)(realtime * 4) & 1));
+	sprintf(temp, "%dx%d", pv->width, pv->height);
+	M_Print(x_value, y, temp);
+	if (vid_menuline == 0) M_DrawCharacter(x_cursor, y, 12 + ((int)(realtime * 4) & 1));
+	y += 8;
 
-	M_Print(2 * 8, 36 + 1 * 8, "Refresh Rate");
+	M_Print(x_label, y, "        Refresh Rate");
 	int cur_refresh = (vid_num_refresh > 0) ? vid_refresh_rates[vid_refresh_index] : 60;
-	sprintf(temp, "          %d Hz", cur_refresh);
-	M_Print(12 * 8, 36 + 1 * 8, temp);
-	if (vid_menuline == 1) M_DrawCharacter(2 * 8 - 8, 36 + 1 * 8, 12 + ((int)(realtime * 4) & 1));
+	sprintf(temp, "%d Hz", cur_refresh);
+	M_Print(x_value, y, temp);
+	if (vid_menuline == 1) M_DrawCharacter(x_cursor, y, 12 + ((int)(realtime * 4) & 1));
+	y += 8;
 
-	M_Print(2 * 8, 36 + 2 * 8, "Vertical Sync");
-	sprintf(temp, "          %s", (int)vid_vsync.value ? "On" : "Off");
-	M_Print(12 * 8, 36 + 2 * 8, temp);
-	if (vid_menuline == 2) M_DrawCharacter(2 * 8 - 8, 36 + 2 * 8, 12 + ((int)(realtime * 4) & 1));
+	M_Print(x_label, y, "        Vertical Sync");
+	sprintf(temp, "%s", (int)vid_vsync.value ? "On" : "Off");
+	M_Print(x_value, y, temp);
+	if (vid_menuline == 2) M_DrawCharacter(x_cursor, y, 12 + ((int)(realtime * 4) & 1));
+	y += 8;
 
-	M_Print(2 * 8, 36 + 3 * 8, "Fullscreen");
+	M_Print(x_label, y,"           Fullscreen");
 	const char* fs_str[] = { "Off", "Borderless", "On" };
-	sprintf(temp, "          %s", fs_str[(int)vid_fullscreen_mode.value]);
-	M_Print(12 * 8, 36 + 3 * 8, temp);
-	if (vid_menuline == 3) M_DrawCharacter(2 * 8 - 8, 36 + 3 * 8, 12 + ((int)(realtime * 4) & 1));
+	sprintf(temp, "%s", fs_str[(int)vid_fullscreen_mode.value]);
+	M_Print(x_value, y, temp);
+	if (vid_menuline == 3) M_DrawCharacter(x_cursor, y, 12 + ((int)(realtime * 4) & 1));
+	y += 16;
 
-	M_Print(2 * 8, 36 + 5 * 8, "Test Changes");
-	if (vid_menuline == 4) M_DrawCharacter(2 * 8 - 8, 36 + 5 * 8, 12 + ((int)(realtime * 4) & 1));
+	M_Print(x_label, y, "         Test Changes");
+	if (vid_menuline == 4) M_DrawCharacter(x_cursor, y, 12 + ((int)(realtime * 4) & 1));
+	y += 8;
 
-	M_Print(2 * 8, 36 + 6 * 8, "Apply Changes");
-	if (vid_menuline == 5) M_DrawCharacter(2 * 8 - 8, 36 + 6 * 8, 12 + ((int)(realtime * 4) & 1));
+	M_Print(x_label, y, "        Apply Changes");
+	if (vid_menuline == 5) M_DrawCharacter(x_cursor, y, 12 + ((int)(realtime * 4) & 1));
+	y += 16;
 
 	if (vid_test_active) {
 		int remain = (int)(vid_test_duration - (realtime - vid_test_start));
 		sprintf(temp, "Test active: %d sec remaining", remain);
-		M_Print(2 * 8, 36 + 8 * 8, temp);
+		M_Print(x_label, y, temp);
 	}
 }
 
