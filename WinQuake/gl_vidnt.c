@@ -1486,6 +1486,7 @@ void	VID_Init(unsigned char* palette)
 	Cvar_SetValue("vid_refreshrate", (float)prev_refresh);
 	Cvar_SetValue("vid_vsync", (float)prev_vsync);
 	Cvar_SetValue("vid_fullscreen_mode", (float)prev_fullscreen);
+	Cvar_SetValue("fps_max", (vid_vsync.value) ? (float)prev_refresh : 0);
 
 	VID_InitDIB();
 	basenummodes = nummodes = 1;
@@ -1877,6 +1878,7 @@ void VID_ApplyChanges(qboolean permanent) {
 		Cvar_SetValue("vid_mode", (float)vid_current_mode);
 		Cvar_SetValue("vid_refreshrate", (float)refresh);
 		Cvar_SetValue("vid_vsync", (float)vsync);
+		Cvar_SetValue("fps_max", (vsync) ? (float)refresh : 0);
 		Cvar_SetValue("vid_fullscreen_mode", (float)fs_mode);
 		Con_Printf("Video changes applied permanently.\n");
 
