@@ -153,7 +153,7 @@ static double vid_test_duration = 15.0; // 15 seconds
 
 static int prev_width = 0, prev_height = 0;
 static int prev_refresh = 60;
-static int prev_vsync = 1; // default on
+static int prev_vsync = 0;
 static int prev_fullscreen = 2; // 2 = exclusive fullscreen
 
 //====================================
@@ -171,7 +171,7 @@ cvar_t		vid_config_y = { "vid_config_y","600", true };
 cvar_t		vid_stretch_by_2 = { "vid_stretch_by_2","1", true };
 cvar_t		_windowed_mouse = { "_windowed_mouse","1", true };
 cvar_t		vid_refreshrate = {"vid_refreshrate", "0", true};
-cvar_t		vid_vsync = { "vid_vsync", "1", true };
+cvar_t		vid_vsync = { "vid_vsync", "0", true };
 cvar_t		vid_fullscreen_mode = { "vid_fullscreen_mode", "2", true };
 
 int			window_center_x, window_center_y, window_x, window_y, window_width, window_height;
@@ -1480,7 +1480,6 @@ void	VID_Init(unsigned char* palette)
 		prev_height = desktop.h;
 		prev_refresh = (desktop.refresh_rate > 0) ? desktop.refresh_rate : 60;
 	}
-	prev_vsync = 1;
 	prev_fullscreen = 2;
 
 	Cvar_SetValue("vid_refreshrate", (float)prev_refresh);
