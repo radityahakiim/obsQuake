@@ -416,6 +416,10 @@ int VID_SetMode(int modenum, unsigned char* palette)
 		Sys_Error(va("Could not initialize GL context: %s", SDL_GetError()));
 	}
 
+	if (!gladLoadGLLoader((GLADloadproc)SDL_GL_GetProcAddress)) {
+		Sys_Error("Failed to initialize GLAD");
+	}
+
 	if (SDL_GL_MakeCurrent(window, glContext) != 0) {
 		Sys_Error(va("SDL_GL_MakeCurrent failed: %s", SDL_GetError()));
 	}
@@ -659,8 +663,8 @@ void GL_BeginRendering(int* x, int* y, int* width, int* height)
 
 void GL_EndRendering(void)
 {
-	if (!scr_skipupdate || block_drawing)
-		SDL_GL_SwapWindow(window);
+	 if (!scr_skipupdate || block_drawing)
+	SDL_GL_SwapWindow(window);
 
 	if (key_dest != key_game) {
 		if (mouseactive) {
@@ -1355,6 +1359,12 @@ void VID_InitFullDIB()
 			}
 	}
 
+	if (nummodes > 1) {
+		SDL_DisplayMode dm;
+		SDL_GetCurrentDisplayMode(0, &dm);
+		Cvar_SetValue("vid_refreshrate", (float)dm.refresh_rate);
+	}
+
 	if (nummodes == 0)
 		Con_SafePrintf("No fullscreen display modes found\n");
 }
@@ -1460,8 +1470,8 @@ void	VID_Init(unsigned char* palette)
 	Cmd_AddCommand("vid_describemodes", VID_DescribeModes_f);
 
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_COMPATIBILITY);
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 1);
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
 	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
 	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
 	SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
@@ -1829,7 +1839,7 @@ void VID_ApplyChanges(qboolean permanent) {
 	int w = pmode->width, h = pmode->height;
 	int refresh = (vid_num_refresh > 0) ? vid_refresh_rates[vid_refresh_index] : 60;
 	int fs_mode = vid_fullscreen_mode.value; // cvar fs
-	int vsync = vid_vsync.value;
+	int vsync = (int)vid_vsync.value;
 
 	// resize window
 	SDL_SetWindowSize(window, w, h);
