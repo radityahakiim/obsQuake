@@ -506,27 +506,33 @@ Returns false if the time is too short to run a frame
 */
 qboolean Host_FilterTime (float time)
 {
+	double delta;
+
 	realtime += time;
+	delta = realtime - oldrealtime;
+
+	// skip frames that are too short to prevent timelapse on high FPS
+	if (delta < 0.0001)
+		return false;
 
 	if (!cls.timedemo && fps_max.value > 0.0f) {
 		double max_frametime = 1.0 / fps_max.value;
-		if (realtime - oldrealtime < max_frametime)
+		if (delta < max_frametime)
 		return false;		// framerate is above max
 	}
 
-	host_frametime = realtime - oldrealtime;
+	host_frametime = delta;
 	oldrealtime = realtime;
 
 	if (host_framerate.value > 0)
 		host_frametime = host_framerate.value;
 	else
-	{	// don't allow really long or short frames
+	{
+		// dont allow really long frames
 		if (host_frametime > 0.1)
 			host_frametime = 0.1;
-		if (host_frametime < 0.001)
-			host_frametime = 0.001;
 	}
-	
+
 	return true;
 }
 
