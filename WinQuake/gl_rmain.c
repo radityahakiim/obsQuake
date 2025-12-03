@@ -520,6 +520,17 @@ void R_DrawAliasModel (entity_t *e)
 	if (gl_affinemodels.value)
 		glHint (GL_PERSPECTIVE_CORRECTION_HINT, GL_FASTEST);
 
+	// for non-NPC models
+	if (paliashdr->numposes > 1 && currententity->frame_interval == 0)
+	{
+		int pose = (int)(cl.time * 10) % paliashdr->numposes;
+
+		currententity->oldframe = pose;
+		currententity->frame = pose;
+
+		currententity->framelerp = 1.0f;
+	}
+
 	int f0 = currententity->oldframe;
 	int f1 = currententity->frame;
 
@@ -530,10 +541,15 @@ void R_DrawAliasModel (entity_t *e)
 	float dt = (cl.time - currententity->frame_start_time) / currententity->frame_interval;
 	if (dt < 0) dt = 0;
 	if (dt > 1) dt = 1;
+
+	if (currententity->forcelink)
+		dt = 1.0f;
+
 	currententity->framelerp = dt;
 
 
 	GL_DrawAliasFrame(paliashdr, f0, f1, currententity->framelerp);
+	lastposenum = currententity->frame;
 
 	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
 
