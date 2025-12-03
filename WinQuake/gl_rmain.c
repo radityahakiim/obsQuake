@@ -527,6 +527,12 @@ void R_DrawAliasModel (entity_t *e)
 	if (f0 < 0) f0 = f1;
 	if (f1 < 0) f1 = f0;
 
+	float dt = (cl.time - currententity->frame_start_time) / currententity->frame_interval;
+	if (dt < 0) dt = 0;
+	if (dt > 1) dt = 1;
+	currententity->framelerp = dt;
+
+
 	GL_DrawAliasFrame(paliashdr, f0, f1, currententity->framelerp);
 
 	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
