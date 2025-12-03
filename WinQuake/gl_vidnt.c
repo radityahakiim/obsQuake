@@ -74,7 +74,6 @@ static int		nummodes;
 static vmode_t* pcurrentmode;
 static vmode_t	badmode;
 
-static DEVMODE	gdevmode;
 static qboolean	vid_initialized = false;
 static qboolean	windowed, leavecurrentmode;
 static qboolean vid_canalttab = false;
@@ -87,10 +86,7 @@ extern int mx_accum;
 extern int my_accum;
 
 int			DIBWidth, DIBHeight;
-RECT		WindowRect;
 DWORD		WindowStyle, ExWindowStyle;
-
-HWND	mainwindow, dibwindow;
 
 int			vid_modenum = NO_MODE;
 int			vid_realmode;
@@ -98,11 +94,9 @@ int			vid_default = MODE_WINDOWED;
 static int	windowed_default;
 unsigned char	vid_curpal[256 * 3];
 static qboolean fullsbardraw = false;
+int win_w, win_h;
 
 static float vid_gamma = 1.0;
-
-HGLRC	baseRC;
-HDC		maindc;
 
 glvert_t glv;
 
@@ -128,11 +122,6 @@ void ClearAllStates(void);
 void VID_UpdateWindowStatus(void);
 void GL_Init(void);
 void Sys_RestartWithMode(int modnum);
-
-PROC glArrayElementEXT;
-PROC glColorPointerEXT;
-PROC glTexCoordPointerEXT;
-PROC glVertexPointerEXT;
 
 typedef void (APIENTRY* lp3DFXFUNC) (int, int, int, int, int, const void*);
 lp3DFXFUNC glColorTableEXT;
@@ -175,7 +164,6 @@ cvar_t		vid_vsync = { "vid_vsync", "0", true };
 cvar_t		vid_fullscreen_mode = { "vid_fullscreen_mode", "2", true };
 
 int			window_center_x, window_center_y, window_x, window_y, window_width, window_height;
-RECT		window_rect;
 
 // SDL globals
 SDL_Window* window = NULL;
@@ -242,10 +230,12 @@ qboolean VID_SetWindowedMode(int modenum)
 	DIBWidth = width;
 	DIBHeight = height;
 
-	WindowRect.left   = 0;
-	WindowRect.top	  = 0;
-	WindowRect.right  = width;
-	WindowRect.bottom = height;
+	SDL_GetWindowSize(window, &win_w, &win_h);
+
+	window_x = 0;
+	window_y = 0;
+	window_width = win_w;
+	window_height = win_h;
 
 	if (vid.conheight > height) vid.conheight = height;
 	if (vid.conwidth > width) vid.conwidth = width;
@@ -303,10 +293,12 @@ qboolean VID_SetFullDIBMode(int modenum)
 	DIBWidth = width;
 	DIBHeight = height;
 
-	WindowRect.left = 0;
-	WindowRect.top = 0;
-	WindowRect.right = width;
-	WindowRect.bottom = height;
+	SDL_GetWindowSize(window, &win_w, &win_h);
+
+	window_x = 0;
+	window_y = 0;
+	window_width = win_w;
+	window_height = win_h;
 
 	vid.conwidth = width;
 	vid.conheight = height;
@@ -429,10 +421,12 @@ int VID_SetMode(int modenum, unsigned char* palette)
 	DIBWidth = width;
 	DIBHeight = height;
 
-	WindowRect.left = 0;
-	WindowRect.top = 0;
-	WindowRect.right = width;
-	WindowRect.bottom = height;
+	SDL_GetWindowSize(window, &win_w, &win_h);
+
+	window_x = 0;
+	window_y = 0;
+	window_width = win_w;
+	window_height = win_h;
 
 	// internal window reference sizes
 	int drawable_w, drawable_h;
@@ -468,13 +462,11 @@ VID_UpdateWindowStatus
 */
 void VID_UpdateWindowStatus(void)
 {
+	SDL_GetWindowPosition(window, &window_x, &window_y);
+	SDL_GetWindowSize(window, &window_width, &window_height);
 
-	window_rect.left = window_x;
-	window_rect.top = window_y;
-	window_rect.right = window_x + window_width;
-	window_rect.bottom = window_y + window_height;
-	window_center_x = (window_rect.left + window_rect.right) / 2;
-	window_center_y = (window_rect.top + window_rect.bottom) / 2;
+	window_center_x = (window_x + window_width) / 2;
+	window_center_y = (window_y + window_height) / 2;
 
 	IN_UpdateClipCursor();
 }
@@ -502,12 +494,12 @@ void CheckTextureExtensions(void)
 	if (!bindTexFunc)
 		Sys_Error("GL: No glBindTexture available!");
 }
-
+/*
 void CheckArrayExtensions(void)
 {
 	char* tmp;
 
-	/* check for texture extension */
+	// check for texture extension
 	tmp = (unsigned char*)glGetString(GL_EXTENSIONS);
 	while (*tmp)
 	{
@@ -529,6 +521,7 @@ void CheckArrayExtensions(void)
 
 	Sys_Error("Vertex array extension not present");
 }
+*/
 
 //int		texture_mode = GL_NEAREST;
 //int		texture_mode = GL_NEAREST_MIPMAP_NEAREST;
@@ -539,7 +532,6 @@ int		texture_mode = GL_LINEAR;
 
 int		texture_extension_number = 1;
 
-#ifdef _WIN32
 void CheckMultiTextureExtensions(void)
 {
 	if (strstr(gl_extensions, "GL_SGIS_multitexture ") && !COM_CheckParm("-nomtex")) {
@@ -549,12 +541,6 @@ void CheckMultiTextureExtensions(void)
 		gl_mtexable = true;
 	}
 }
-#else
-void CheckMultiTextureExtensions(void)
-{
-	gl_mtexable = true;
-}
-#endif
 
 /*
 ===============
@@ -603,16 +589,6 @@ void GL_Init(void)
 
 	//	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
 	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
-
-#if 0
-	CheckArrayExtensions();
-
-	glEnable(GL_VERTEX_ARRAY_EXT);
-	glEnable(GL_TEXTURE_COORD_ARRAY_EXT);
-	glVertexPointerEXT(3, GL_FLOAT, 0, 0, &glv.x);
-	glTexCoordPointerEXT(2, GL_FLOAT, 0, 0, &glv.s);
-	glColorPointerEXT(3, GL_FLOAT, 0, 0, &glv.r);
-#endif
 }
 
 /*
@@ -739,7 +715,6 @@ void	VID_SetPalette(unsigned char* palette)
 	}
 }
 
-BOOL	gammaworks;
 
 void	VID_ShiftPalette(unsigned char* palette)
 {
@@ -785,52 +760,6 @@ void	VID_Shutdown(void)
 
 
 //==========================================================================
-
-
-byte        scantokey[128] =
-{
-	//  0           1       2       3       4       5       6       7 
-	//  8           9       A       B       C       D       E       F 
-		0  ,    27,     '1',    '2',    '3',    '4',    '5',    '6',
-		'7',    '8',    '9',    '0',    '-',    '=',    K_BACKSPACE, 9, // 0 
-		'q',    'w',    'e',    'r',    't',    'y',    'u',    'i',
-		'o',    'p',    '[',    ']',    13 ,    K_CTRL,'a',  's',      // 1 
-		'd',    'f',    'g',    'h',    'j',    'k',    'l',    ';',
-		'\'' ,    '`',    K_SHIFT,'\\',  'z',    'x',    'c',    'v',      // 2 
-		'b',    'n',    'm',    ',',    '.',    '/',    K_SHIFT,'*',
-		K_ALT,' ',   0  ,    K_F1, K_F2, K_F3, K_F4, K_F5,   // 3 
-		K_F6, K_F7, K_F8, K_F9, K_F10, K_PAUSE  ,    0  , K_HOME,
-		K_UPARROW,K_PGUP,'-',K_LEFTARROW,'5',K_RIGHTARROW,'+',K_END, //4 
-		K_DOWNARROW,K_PGDN,K_INS,K_DEL,0,0,             0,              K_F11,
-		K_F12,0  ,    0  ,    0  ,    0  ,    0  ,    0  ,    0,        // 5 
-		0  ,    0  ,    0  ,    0  ,    0  ,    0  ,    0  ,    0,
-		0  ,    0  ,    0  ,    0  ,    0  ,    0  ,    0  ,    0,        // 6 
-		0  ,    0  ,    0  ,    0  ,    0  ,    0  ,    0  ,    0,
-		0  ,    0  ,    0  ,    0  ,    0  ,    0  ,    0  ,    0         // 7 
-};
-
-byte        shiftscantokey[128] =
-{
-	//  0           1       2       3       4       5       6       7 
-	//  8           9       A       B       C       D       E       F 
-		0  ,    27,     '!',    '@',    '#',    '$',    '%',    '^',
-		'&',    '*',    '(',    ')',    '_',    '+',    K_BACKSPACE, 9, // 0 
-		'Q',    'W',    'E',    'R',    'T',    'Y',    'U',    'I',
-		'O',    'P',    '{',    '}',    13 ,    K_CTRL,'A',  'S',      // 1 
-		'D',    'F',    'G',    'H',    'J',    'K',    'L',    ':',
-		'"' ,    '~',    K_SHIFT,'|',  'Z',    'X',    'C',    'V',      // 2 
-		'B',    'N',    'M',    '<',    '>',    '?',    K_SHIFT,'*',
-		K_ALT,' ',   0  ,    K_F1, K_F2, K_F3, K_F4, K_F5,   // 3 
-		K_F6, K_F7, K_F8, K_F9, K_F10, K_PAUSE  ,    0  , K_HOME,
-		K_UPARROW,K_PGUP,'_',K_LEFTARROW,'%',K_RIGHTARROW,'+',K_END, //4 
-		K_DOWNARROW,K_PGDN,K_INS,K_DEL,0,0,             0,              K_F11,
-		K_F12,0  ,    0  ,    0  ,    0  ,    0  ,    0  ,    0,        // 5 
-		0  ,    0  ,    0  ,    0  ,    0  ,    0  ,    0  ,    0,
-		0  ,    0  ,    0  ,    0  ,    0  ,    0  ,    0  ,    0,        // 6 
-		0  ,    0  ,    0  ,    0  ,    0  ,    0  ,    0  ,    0,
-		0  ,    0  ,    0  ,    0  ,    0  ,    0  ,    0  ,    0         // 7 
-};
-
 
 /*
 =======
@@ -954,44 +883,25 @@ void ClearAllStates(void)
 
 void AppActivate(const SDL_Event* event)
 {
-	static qboolean sound_active = true;
+	Uint32 flags = SDL_GetWindowFlags(window);
+	qboolean focused = (flags & SDL_WINDOW_INPUT_FOCUS) ? true : false;
+	qboolean minimized = (flags & SDL_WINDOW_MINIMIZED) ? true : false;
 
-	qboolean active = false;
-	qboolean inactive = false;
-
-	if (event->type == SDL_WINDOWEVENT)
-	{
-		switch (event->window.event)
-		{
-		case SDL_WINDOWEVENT_FOCUS_GAINED:
-		case SDL_WINDOWEVENT_RESTORED:
-			active = true;
-			break;
-
-		case SDL_WINDOWEVENT_FOCUS_LOST:
-		case SDL_WINDOWEVENT_MINIMIZED:
-			inactive = true;
-			break;
-		}
-	}
-
-	ActiveApp = active;
-	Minimized = inactive;
+	ActiveApp = focused;
+	Minimized = minimized;
 
 	// Sound handling
-	if (!ActiveApp && sound_active)
+	if (!ActiveApp)
 	{
 		S_BlockSound();
-		sound_active = false;
 	}
-	else if (ActiveApp && !sound_active)
+	else if (ActiveApp)
 	{
 		S_UnblockSound();
-		sound_active = true;
 	}
 
 	// Mouse behavior
-	if (active)
+	if (ActiveApp)
 	{
 		if (modestate == MS_FULLDIB ||
 			(modestate == MS_WINDOWED && _windowed_mouse.value && key_dest == key_game))
@@ -1003,7 +913,7 @@ void AppActivate(const SDL_Event* event)
 		ClearAllStates();
 	}
 
-	if (inactive)
+	if (ActiveApp)
 	{
 		IN_DeactivateMouse();
 		IN_ShowMouse();
@@ -1445,9 +1355,7 @@ void	VID_Init(unsigned char* palette)
 	int		basenummodes, width, height, bpp, findbpp, done;
 	byte* ptmp;
 	char	gldir[MAX_OSPATH];
-	DEVMODE	devmode;
-
-	memset(&devmode, 0, sizeof(devmode));
+	SDL_DisplayMode desktop;
 
 	Cvar_RegisterVariable(&vid_mode);
 	Cvar_RegisterVariable(&vid_wait);
@@ -1484,7 +1392,6 @@ void	VID_Init(unsigned char* palette)
 		Sys_Error(va("VID_Init: Couldn't load SDL video subsystem: %s", SDL_GetError()));
 
 	// detect defaults on init
-	SDL_DisplayMode desktop;
 	if (SDL_GetDesktopDisplayMode(0, &desktop) == 0) {
 		prev_width = desktop.w;
 		prev_height = desktop.h;
@@ -1523,10 +1430,11 @@ void	VID_Init(unsigned char* palette)
 		{
 			if (COM_CheckParm("-current"))
 			{
+				SDL_GetDesktopDisplayMode(0, &desktop);
 				modelist[MODE_FULLSCREEN_DEFAULT].width =
-					GetSystemMetrics(SM_CXSCREEN);
+					desktop.w;
 				modelist[MODE_FULLSCREEN_DEFAULT].height =
-					GetSystemMetrics(SM_CYSCREEN);
+					desktop.h;
 				vid_default = MODE_FULLSCREEN_DEFAULT;
 				leavecurrentmode = 1;
 			}
@@ -1538,7 +1446,8 @@ void	VID_Init(unsigned char* palette)
 				}
 				else
 				{
-					width = GetSystemMetrics(SM_CXSCREEN);
+					SDL_GetDesktopDisplayMode(0, &desktop);
+					width = desktop.w;
 				}
 
 				if (COM_CheckParm("-bpp"))
@@ -1558,6 +1467,7 @@ void	VID_Init(unsigned char* palette)
 				// if they want to force it, add the specified mode to the list
 				if (COM_CheckParm("-force") && (nummodes < MAX_MODE_LIST))
 				{
+					SDL_GetDesktopDisplayMode(0, &desktop);
 					modelist[nummodes].type = MS_FULLDIB;
 					modelist[nummodes].width = width;
 					modelist[nummodes].height = height;
@@ -1567,8 +1477,8 @@ void	VID_Init(unsigned char* palette)
 					modelist[nummodes].fullscreen = 1;
 					modelist[nummodes].bpp = bpp;
 					sprintf(modelist[nummodes].modedesc, "%dx%dx%d",
-						devmode.dmPelsWidth, devmode.dmPelsHeight,
-						devmode.dmBitsPerPel);
+						desktop.w, desktop.h,
+						desktop.format);
 
 					for (i = nummodes, existingmode = 0; i < nummodes; i++)
 					{

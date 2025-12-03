@@ -177,9 +177,9 @@ IN_UpdateClipCursor
 void IN_UpdateClipCursor (void)
 {
 
-	if (mouseinitialized && mouseactive && !dinput)
+	if (mouseinitialized && mouseactive)
 	{
-		ClipCursor (&window_rect);
+		SDL_SetRelativeMouseMode(SDL_TRUE);
 	}
 }
 
