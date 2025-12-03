@@ -286,38 +286,20 @@ int	lastposenum;
 GL_DrawAliasFrame
 =============
 */
-void GL_DrawAliasFrame (aliashdr_t *paliashdr, int posenum)
+void GL_DrawAliasFrame(aliashdr_t* hdr, int oldpose, int newpose, float lerp)
 {
-	float	s, t;
-	float 	l;
-	int		i, j;
-	int		index;
-	trivertx_t	*v, *verts;
-	int		list;
-	int		*order;
-	vec3_t	point;
-	float	*normal;
-	int		count;
 
-lastposenum = posenum;
+	trivertx_t* oldv, * newv;
+	int* order = (int*)((byte*)hdr + hdr->commands);
+	int count;
 
-	verts = (trivertx_t *)((byte *)paliashdr + paliashdr->posedata);
-	verts += posenum * paliashdr->poseverts;
-	order = (int *)((byte *)paliashdr + paliashdr->commands);
+	oldv = (trivertx_t*)((byte*)hdr + hdr->posedata) + oldpose * hdr->poseverts;
+	newv = (trivertx_t*)((byte*)hdr + hdr->posedata) + newpose * hdr->poseverts;
 
-	while (1)
+	while ((count = *order++))
 	{
-		// get the vertex count and primitive type
-		count = *order++;
-		if (!count)
-			break;		// done
-		if (count < 0)
-		{
-			count = -count;
-			glBegin (GL_TRIANGLE_FAN);
-		}
-		else
-			glBegin (GL_TRIANGLE_STRIP);
+		glBegin(count < 0 ? GL_TRIANGLE_FAN : GL_TRIANGLE_STRIP);
+		if (count < 0) count = -count;
 
 		do
 		{
@@ -325,13 +307,17 @@ lastposenum = posenum;
 			glTexCoord2f (((float *)order)[0], ((float *)order)[1]);
 			order += 2;
 
-			// normals and vertexes come from the frame list
-			l = shadedots[verts->lightnormalindex] * shadelight;
-			glColor3f (l, l, l);
-			glVertex3f (verts->v[0], verts->v[1], verts->v[2]);
-			verts++;
-		} while (--count);
+			// interpolate vertex
+			float x = oldv->v[0] + lerp * (newv->v[0] - oldv->v[0]);
+			float y = oldv->v[1] + lerp * (newv->v[1] - oldv->v[1]);
+			float z = oldv->v[2] + lerp * (newv->v[2] - oldv->v[2]);
 
+			float l = shadedots[newv->lightnormalindex] * shadelight;
+			glColor3f(l, l, l);
+			glVertex3f(x, y, z);
+
+			oldv++; newv++;
+		} while (--count);
 		glEnd ();
 	}
 }
@@ -403,38 +389,6 @@ void GL_DrawAliasShadow (aliashdr_t *paliashdr, int posenum)
 		glEnd ();
 	}	
 }
-
-
-
-/*
-=================
-R_SetupAliasFrame
-
-=================
-*/
-void R_SetupAliasFrame (int frame, aliashdr_t *paliashdr)
-{
-	int				pose, numposes;
-	float			interval;
-
-	if ((frame >= paliashdr->numframes) || (frame < 0))
-	{
-		Con_DPrintf ("R_AliasSetupFrame: no such frame %d\n", frame);
-		frame = 0;
-	}
-
-	pose = paliashdr->frames[frame].firstpose;
-	numposes = paliashdr->frames[frame].numposes;
-
-	if (numposes > 1)
-	{
-		interval = paliashdr->frames[frame].interval;
-		pose += (int)(cl.time / interval) % numposes;
-	}
-
-	GL_DrawAliasFrame (paliashdr, pose);
-}
-
 
 
 /*
@@ -566,7 +520,14 @@ void R_DrawAliasModel (entity_t *e)
 	if (gl_affinemodels.value)
 		glHint (GL_PERSPECTIVE_CORRECTION_HINT, GL_FASTEST);
 
-	R_SetupAliasFrame (currententity->frame, paliashdr);
+	int f0 = currententity->oldframe;
+	int f1 = currententity->frame;
+
+	// safeguard
+	if (f0 < 0) f0 = f1;
+	if (f1 < 0) f1 = f0;
+
+	GL_DrawAliasFrame(paliashdr, f0, f1, currententity->framelerp);
 
 	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
 
@@ -675,6 +636,18 @@ void R_DrawViewModel (void)
 	currententity = &cl.viewent;
 	if (!currententity->model)
 		return;
+
+	if (currententity->frame != currententity->oldframe)
+	{
+		currententity->oldframe = currententity->frame;
+		currententity->frame_start_time = cl.time;
+	}
+	currententity->frame_interval = 0.1f;
+
+	float dt = (cl.time - currententity->frame_start_time) / currententity->frame_interval;
+	if (dt < 0) dt = 0;
+	if (dt > 1) dt = 1;
+	currententity->framelerp = dt;
 
 	j = R_LightPoint (currententity->origin);
 

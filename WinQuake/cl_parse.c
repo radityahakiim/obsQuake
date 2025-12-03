@@ -398,7 +398,16 @@ if (bits&(1<<i))
 	}
 	
 	if (bits & U_FRAME)
-		ent->frame = MSG_ReadByte ();
+	{
+		int new_frame = MSG_ReadByte();
+		if (new_frame != ent->frame)
+		{
+			ent->oldframe = ent->frame;
+			ent->frame = new_frame;
+			ent->frame_start_time = cl.time;
+			ent->frame_interval = 0.1f;
+		}
+	}
 	else
 		ent->frame = ent->baseline.frame;
 
