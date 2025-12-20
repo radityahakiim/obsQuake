@@ -474,8 +474,6 @@ void VID_UpdateWindowStatus(void)
 
 //====================================
 
-BINDTEXFUNCPTR bindTexFunc;
-
 #define TEXTURE_EXT_STRING "GL_EXT_texture_object"
 
 
@@ -486,13 +484,6 @@ void CheckTextureExtensions(void)
 		Con_SafePrintf("No texture object extension, using fallback.\n");
 		return;
 	}
-
-	// load glBinTextture
-	bindTexFunc = SDL_GL_GetProcAddress("glBindTextureEXT");
-	if (!bindTexFunc)
-		bindTexFunc = SDL_GL_GetProcAddress("glBindTexture");
-	if (!bindTexFunc)
-		Sys_Error("GL: No glBindTexture available!");
 }
 /*
 void CheckArrayExtensions(void)
