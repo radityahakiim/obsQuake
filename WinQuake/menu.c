@@ -89,6 +89,8 @@ qboolean	m_entersound;		// play after drawing a frame, so caching
 								// won't disrupt the sound
 qboolean	m_recursiveDraw;
 
+static int menu_y_offset = 0;
+
 int			m_return_state;
 qboolean	m_return_onerror;
 char		m_return_reason [32];
@@ -111,7 +113,7 @@ Draws one solid graphics character
 */
 void M_DrawCharacter (int cx, int line, int num)
 {
-	Draw_Character ( cx + ((vid.width - 320)>>1), line, num);
+	Draw_Character ( cx + ((vid.width - 320)>>1), line + menu_y_offset, num);
 }
 
 void M_Print (int cx, int cy, char *str)
@@ -136,12 +138,12 @@ void M_PrintWhite (int cx, int cy, char *str)
 
 void M_DrawTransPic (int x, int y, qpic_t *pic)
 {
-	Draw_TransPic (x + ((vid.width - 320)>>1), y, pic);
+	Draw_TransPic (x + ((vid.width - 320)>>1), y + menu_y_offset, pic);
 }
 
 void M_DrawPic (int x, int y, qpic_t *pic)
 {
-	Draw_Pic (x + ((vid.width - 320)>>1), y, pic);
+	Draw_Pic (x + ((vid.width - 320)>>1), y + menu_y_offset, pic);
 }
 
 byte identityTable[256];
@@ -174,7 +176,7 @@ void M_BuildTranslationTable(int top, int bottom)
 
 void M_DrawTransPicTranslate (int x, int y, qpic_t *pic)
 {
-	Draw_TransPicTranslate (x + ((vid.width - 320)>>1), y, pic, translationTable);
+	Draw_TransPicTranslate (x + ((vid.width - 320)>>1), y + menu_y_offset, pic, translationTable);
 }
 
 
@@ -3026,6 +3028,11 @@ void M_Draw (void)
 	if (!m_recursiveDraw)
 	{
 		scr_copyeverything = 1;
+
+		// center the 320x200 menu vertically in the current resolution
+		menu_y_offset = (vid.height - 200) >> 1;
+		if (menu_y_offset < 0)
+			menu_y_offset = 0;
 
 		if (scr_con_current)
 		{
