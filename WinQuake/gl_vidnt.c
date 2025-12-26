@@ -78,6 +78,7 @@ static qboolean	vid_initialized = false;
 static qboolean	windowed, leavecurrentmode;
 static qboolean vid_canalttab = false;
 static qboolean vid_wassuspended = false;
+static qboolean paused_for_focus = false;
 static int		windowed_mouse;
 extern qboolean	mouseactive;  // from in_win.c
 static HICON	hIcon;
@@ -881,34 +882,49 @@ void AppActivate(const SDL_Event* event)
 	ActiveApp = focused;
 	Minimized = minimized;
 
-	// Sound handling
 	if (!ActiveApp)
 	{
-		S_BlockSound();
-	}
-	else if (ActiveApp)
-	{
-		S_UnblockSound();
-	}
+		scr_skipupdate = true;
 
-	// Mouse behavior
-	if (ActiveApp)
+		if (!cl.paused)
+		{
+			paused_for_focus = true;
+			cl.paused = true;
+		}
+
+		S_BlockSound();
+		CDAudio_Pause();
+
+		IN_DeactivateMouse();
+		IN_ShowMouse();
+		ClearAllStates();
+		VID_HandlePause(true);
+	}
+	else
 	{
+		scr_skipupdate = false;
+
+		S_UnblockSound();
+		CDAudio_Resume();
+
+		if (paused_for_focus)
+		{
+			cl.paused = false;
+			paused_for_focus = false;
+		}
+
 		if (modestate == MS_FULLDIB ||
 			(modestate == MS_WINDOWED && _windowed_mouse.value && key_dest == key_game))
 		{
 			IN_ActivateMouse();
 			IN_HideMouse();
 		}
-
+		else {
+			IN_DeactivateMouse();
+			IN_ShowMouse();
+		}
 		ClearAllStates();
-	}
-
-	if (ActiveApp)
-	{
-		IN_DeactivateMouse();
-		IN_ShowMouse();
-		ClearAllStates();
+		VID_HandlePause(false);
 	}
 }
 
@@ -934,15 +950,11 @@ void HandleEvents()
 				break;
 			case SDL_WINDOWEVENT_FOCUS_GAINED:
 			case SDL_WINDOWEVENT_RESTORED:
-				ActiveApp = true;
-				IN_ActivateMouse();
-				IN_HideMouse();
-				break;
 			case SDL_WINDOWEVENT_FOCUS_LOST:
 			case SDL_WINDOWEVENT_MINIMIZED:
-				ActiveApp = false;
-				IN_DeactivateMouse();
-				IN_ShowMouse();
+				AppActivate(&event);
+				if (event.window.event == SDL_WINDOWEVENT_RESTORED)
+					VID_UpdateWindowStatus();
 				break;
 			}
 			break;
