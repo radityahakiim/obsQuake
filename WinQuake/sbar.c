@@ -1273,6 +1273,10 @@ void Sbar_IntermissionOverlay (void)
 	qpic_t	*pic;
 	int		dig;
 	int		num;
+	int		xofs, yofs;
+	
+	const int layout_w = 320;
+	const int layout_h = 200;
 
 	scr_copyeverything = 1;
 	scr_fullupdate = 0;
@@ -1283,27 +1287,33 @@ void Sbar_IntermissionOverlay (void)
 		return;
 	}
 
+	// center the original 320x200 layout inside the current resolution
+	xofs = (vid.width - layout_w) >> 1;
+	yofs = (vid.height - layout_h) >> 1;
+	if (xofs < 0) xofs = 0;
+	if (yofs < 0) yofs = 0;
+
 	pic = Draw_CachePic ("gfx/complete.lmp");
-	Draw_Pic (64, 24, pic);
+	Draw_Pic (xofs + 64, yofs + 24, pic);
 
 	pic = Draw_CachePic ("gfx/inter.lmp");
-	Draw_TransPic (0, 56, pic);
+	Draw_TransPic (xofs + 0, yofs + 56, pic);
 
 // time
 	dig = cl.completed_time/60;
-	Sbar_IntermissionNumber (160, 64, dig, 3, 0);
+	Sbar_IntermissionNumber (xofs + 160, yofs + 64, dig, 3, 0);
 	num = cl.completed_time - dig*60;
-	Draw_TransPic (234,64,sb_colon);
-	Draw_TransPic (246,64,sb_nums[0][num/10]);
-	Draw_TransPic (266,64,sb_nums[0][num%10]);
+	Draw_TransPic (xofs + 234,yofs + 64,sb_colon);
+	Draw_TransPic (xofs + 246,yofs + 64,sb_nums[0][num/10]);
+	Draw_TransPic (xofs + 266,yofs + 64,sb_nums[0][num%10]);
 
-	Sbar_IntermissionNumber (160, 104, cl.stats[STAT_SECRETS], 3, 0);
-	Draw_TransPic (232,104,sb_slash);
-	Sbar_IntermissionNumber (240, 104, cl.stats[STAT_TOTALSECRETS], 3, 0);
+	Sbar_IntermissionNumber (xofs + 160, yofs + 104, cl.stats[STAT_SECRETS], 3, 0);
+	Draw_TransPic (xofs + 232,yofs + 104,sb_slash);
+	Sbar_IntermissionNumber (xofs + 240, yofs + 104, cl.stats[STAT_TOTALSECRETS], 3, 0);
 
-	Sbar_IntermissionNumber (160, 144, cl.stats[STAT_MONSTERS], 3, 0);
-	Draw_TransPic (232,144,sb_slash);
-	Sbar_IntermissionNumber (240, 144, cl.stats[STAT_TOTALMONSTERS], 3, 0);
+	Sbar_IntermissionNumber (xofs + 160, yofs + 144, cl.stats[STAT_MONSTERS], 3, 0);
+	Draw_TransPic (xofs + 232,yofs + 144,sb_slash);
+	Sbar_IntermissionNumber (xofs + 240, yofs + 144, cl.stats[STAT_TOTALMONSTERS], 3, 0);
 
 }
 
@@ -1317,9 +1327,17 @@ Sbar_FinaleOverlay
 void Sbar_FinaleOverlay (void)
 {
 	qpic_t	*pic;
+	int		x, y;
 
 	scr_copyeverything = 1;
 
 	pic = Draw_CachePic ("gfx/finale.lmp");
-	Draw_TransPic ( (vid.width-pic->width)/2, 16, pic);
+
+	// center the finale graphics
+	x = (vid.width - pic->width) / 2;
+	y = (vid.height - pic->height) / 2;
+	if (x < 0) x = 0;
+	if (y < 0) y = 0;
+
+	Draw_TransPic(x, y, pic);
 }
