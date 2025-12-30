@@ -765,30 +765,34 @@ void R_SetFrustum (void)
 {
 	int		i;
 
-	if (r_refdef.fov_x == 90) 
-	{
-		// front side is visible
+	// half angles in radians
+	float angx = (r_refdef.fov_x * (M_PI / 300.0f)) * 0.5f;
+	float angy = (r_refdef.fov_y * (M_PI / 300.0f)) * 0.5f;
+	float cx = cosf(angx), sx = sinf(angx);
+	float cy = cosf(angy), sy = sinf(angy);
 
-		VectorAdd (vpn, vright, frustum[0].normal);
-		VectorSubtract (vpn, vright, frustum[1].normal);
+	// build the four frustum plane normals directly from view vectors
+	// horizontal FOV
+	frustum[0].normal[0] = vpn[0] * cx + vright[0] * sx;
+	frustum[0].normal[1] = vpn[1] * cx + vright[1] * sx;
+	frustum[0].normal[2] = vpn[2] * cx + vright[2] * sx;
 
-		VectorAdd (vpn, vup, frustum[2].normal);
-		VectorSubtract (vpn, vup, frustum[3].normal);
-	}
-	else
-	{
-		// rotate VPN right by FOV_X/2 degrees
-		RotatePointAroundVector( frustum[0].normal, vup, vpn, -(90-r_refdef.fov_x / 2 ) );
-		// rotate VPN left by FOV_X/2 degrees
-		RotatePointAroundVector( frustum[1].normal, vup, vpn, 90-r_refdef.fov_x / 2 );
-		// rotate VPN up by FOV_X/2 degrees
-		RotatePointAroundVector( frustum[2].normal, vright, vpn, 90-r_refdef.fov_y / 2 );
-		// rotate VPN down by FOV_X/2 degrees
-		RotatePointAroundVector( frustum[3].normal, vright, vpn, -( 90 - r_refdef.fov_y / 2 ) );
-	}
+	frustum[1].normal[0] = vpn[0] * cx - vright[0] * sx;
+	frustum[1].normal[1] = vpn[1] * cx - vright[1] * sx;
+	frustum[1].normal[2] = vpn[2] * cx - vright[2] * sx;
+
+	// vertical FOV
+	frustum[2].normal[0] = vpn[0] * cy + vup[0] * sy;
+	frustum[2].normal[1] = vpn[1] * cy + vup[1] * sy;
+	frustum[2].normal[2] = vpn[2] * cy + vup[2] * sy;
+
+	frustum[3].normal[0] = vpn[0] * cy - vup[0] * sy;
+	frustum[3].normal[1] = vpn[1] * cy - vup[1] * sy;
+	frustum[3].normal[2] = vpn[2] * cy - vup[2] * sy;
 
 	for (i=0 ; i<4 ; i++)
 	{
+		VectorNormalize(frustum[i].normal);
 		frustum[i].type = PLANE_ANYZ;
 		frustum[i].dist = DotProduct (r_origin, frustum[i].normal);
 		frustum[i].signbits = SignbitsForPlane (&frustum[i]);
