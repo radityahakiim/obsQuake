@@ -105,6 +105,8 @@ cvar_t	gl_ztrick = { "gl_ztrick","1" };
 
 viddef_t	vid;				// global video state
 
+int vid_bpp = 8;
+
 unsigned short	d_8to16table[256];
 unsigned	d_8to24table[256];
 unsigned char d_15to8table[65536];
@@ -277,7 +279,13 @@ qboolean VID_SetFullDIBMode(int modenum)
 	mode.w = width;
 	mode.h = height;
 	mode.refresh_rate = 0; // keep default if unknown
-	mode.format = SDL_PIXELFORMAT_RGB888;
+	
+	if (bpp >= 32)
+		mode.format = SDL_PIXELFORMAT_RGBA8888;
+	else if (bpp == 24)
+		mode.format = SDL_PIXELFORMAT_RGB888;
+	else
+		mode.format = SDL_PIXELFORMAT_RGB332;
 
 	if (SDL_SetWindowDisplayMode(window, &mode) != 0)
 	{
@@ -381,7 +389,13 @@ int VID_SetMode(int modenum, unsigned char* palette)
 		sdl_dm.w = width;
 		sdl_dm.h = height;
 		sdl_dm.refresh_rate = 0;
-		sdl_dm.format = SDL_PIXELFORMAT_RGB888;
+		
+		if (mode.bpp >= 32)
+			sdl_dm.format = SDL_PIXELFORMAT_RGBA8888;
+		else if (mode.bpp == 24)
+			sdl_dm.format = SDL_PIXELFORMAT_RGB888;
+		else
+			sdl_dm.format = SDL_PIXELFORMAT_RGB332;
 
 		if (SDL_SetWindowDisplayMode(window, &sdl_dm) != 0)
 		{
@@ -1224,11 +1238,14 @@ void VID_InitFullDIB()
 	{
 		if (SDL_GetDisplayMode(display_idx, i, &mode) != 0)
 			continue;
+		
+		int fmt_bpp = 0;
+		int rmask = 0, gmask = 0, bmask = 0, amask = 0;
 
 			if (mode.format != SDL_PIXELFORMAT_RGBA8888 &&
 				mode.format != SDL_PIXELFORMAT_ARGB8888 &&
-				mode.format != SDL_PIXELFORMAT_RGB888
-				)
+				mode.format != SDL_PIXELFORMAT_RGB888 &&
+				mode.format != SDL_PIXELFORMAT_RGB332)
 				continue;
 
 			if (mode.w > MAXWIDTH || mode.h > MAXHEIGHT)
@@ -1252,15 +1269,25 @@ void VID_InitFullDIB()
 				modelist[nummodes].width = mode.w;
 				modelist[nummodes].height = mode.h;
 				int bpp = 32;
-				switch (mode.format)
-				{
-				case SDL_PIXELFORMAT_RGB888:
-					bpp = 24;
-					break;
-				default:
-					bpp = 32;
-					break;
+
+				if (SDL_PixelFormatEnumToMasks(mode.format, &fmt_bpp, &rmask, &gmask, &bmask, &amask)) {
+					bpp = fmt_bpp;
 				}
+				else {
+
+					switch (mode.format)
+					{
+					case SDL_PIXELFORMAT_RGB888:
+						bpp = 24;
+						break;
+					default:
+						bpp = 32;
+						break;
+					}
+				}
+
+				if (bpp < 8) bpp = 8;
+
 				modelist[nummodes].bpp = bpp;
 				modelist[nummodes].fullscreen = 1;
 				modelist[nummodes].dib = 1;
@@ -1276,6 +1303,11 @@ void VID_InitFullDIB()
 		SDL_DisplayMode dm;
 		SDL_GetCurrentDisplayMode(0, &dm);
 		Cvar_SetValue("vid_refreshrate", (float)dm.refresh_rate);
+		int desktop_bpp = 0, r = 0, g = 0, b = 0, a = 0;
+		if (SDL_PixelFormatEnumToMasks(dm.format, &desktop_bpp, &r, &g, &b, &a)) {
+			vid_bpp = desktop_bpp;
+			if (vid_bpp < 8) vid_bpp = 8;
+		}
 	}
 
 	if (nummodes == 0)
@@ -1399,6 +1431,27 @@ void	VID_Init(unsigned char* palette)
 		prev_width = desktop.w;
 		prev_height = desktop.h;
 		prev_refresh = (desktop.refresh_rate > 0) ? desktop.refresh_rate : 60;
+		{
+			int dbpp = 0, r = 0, g = 0, b = 0, a = 0;
+			if (SDL_PixelFormatEnumToMasks(desktop.format, &dbpp, &r, &g, &b, &a)) {
+				vid_bpp = dbpp;
+			}
+			else {
+				switch (desktop.format) {
+				case SDL_PIXELFORMAT_RGB888:
+					vid_bpp = 24;
+					break;
+				case SDL_PIXELFORMAT_RGBA8888:
+				case SDL_PIXELFORMAT_ARGB8888:
+					vid_bpp = 32;
+					break;
+				defaut:
+					vid_bpp = 8;
+					break;
+				}
+			}
+			if (vid_bpp < 8) vid_bpp = 8;
+		}
 	}
 	prev_fullscreen = 2;
 
@@ -1438,6 +1491,8 @@ void	VID_Init(unsigned char* palette)
 					desktop.w;
 				modelist[MODE_FULLSCREEN_DEFAULT].height =
 					desktop.h;
+				modelist[MODE_FULLSCREEN_DEFAULT].bpp =
+					(vid_bpp >= 8) ? vid_bpp : 8;
 				vid_default = MODE_FULLSCREEN_DEFAULT;
 				leavecurrentmode = 1;
 			}
