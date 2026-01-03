@@ -766,8 +766,8 @@ void R_SetFrustum (void)
 	int		i;
 
 	// half angles in radians
-	float angx = (r_refdef.fov_x * (M_PI / 300.0f)) * 0.5f;
-	float angy = (r_refdef.fov_y * (M_PI / 300.0f)) * 0.5f;
+	float angx = (r_refdef.fov_x * (M_PI / 180.0f)) * 0.25f;
+	float angy = (r_refdef.fov_y * (M_PI / 180.0f)) * 0.25f;
 	float cx = cosf(angx), sx = sinf(angx);
 	float cy = cosf(angy), sy = sinf(angy);
 
@@ -792,7 +792,6 @@ void R_SetFrustum (void)
 
 	for (i=0 ; i<4 ; i++)
 	{
-		VectorNormalize(frustum[i].normal);
 		frustum[i].type = PLANE_ANYZ;
 		frustum[i].dist = DotProduct (r_origin, frustum[i].normal);
 		frustum[i].signbits = SignbitsForPlane (&frustum[i]);
