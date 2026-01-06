@@ -27,7 +27,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include <windows.h>
 #endif
 
-#include <SDL.h>
+// #include <SDL.h>
 #include <glad/glad.h>
 
 void GL_BeginRendering (int *x, int *y, int *width, int *height);
