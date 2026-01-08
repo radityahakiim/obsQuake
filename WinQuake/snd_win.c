@@ -214,13 +214,17 @@ sndinitstat SNDDMA_InitDirect (void)
 	HRESULT			hresult;
 	int				reps;
 
+	int possible_rates[] = { 192000, 96000, 48000, 44100, 22050, 11025, 8000 };
+	int num_rates = sizeof(possible_rates) / sizeof(possible_rates[0]);
+	int selected_rate = 0;
+
 	memset ((void *)&sn, 0, sizeof (sn));
 
 	shm = &sn;
 
 	shm->channels = 2;
 	shm->samplebits = 16;
-	shm->speed = 48000;
+	// shm->speed = 48000;
 
 	if (SDL_InitSubSystem(SDL_INIT_AUDIO) < 0)
 	{
@@ -229,14 +233,21 @@ sndinitstat SNDDMA_InitDirect (void)
 	}
 
 	memset (&desired, 0, sizeof(desired));
-	desired.freq = shm->speed;
+	// desired.freq = shm->speed;
 	desired.format = AUDIO_S16LSB;
 	desired.channels = shm->channels;
 	desired.samples = 1024;
 	desired.callback = SNDDMA_Callback;
 	desired.userdata = NULL;
 
-	sdl_audio = SDL_OpenAudioDevice(NULL, 0, &desired, &obtained, 0);
+	for (int i = 0; i < num_rates; i++) {
+		desired.freq = possible_rates[i];
+		sdl_audio = SDL_OpenAudioDevice(NULL, 0, &desired, &obtained, 0);
+		if (sdl_audio != 0) {
+			selected_rate = obtained.freq;
+			break;
+		}
+	}
 	if (sdl_audio == 0)
 	{
 		Con_SafePrintf("Couldn't open SDL audio: %s\n", SDL_GetError());
@@ -244,7 +255,7 @@ sndinitstat SNDDMA_InitDirect (void)
 		return SIS_FAILURE;
 	}
 
-	shm->speed	  = obtained.freq;
+	shm->speed	  = selected_rate;
 	shm->channels = obtained.channels;
 	if (obtained.format != AUDIO_S16LSB && obtained.format != AUDIO_S16MSB)
 	{
