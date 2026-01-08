@@ -214,7 +214,7 @@ sndinitstat SNDDMA_InitDirect (void)
 	HRESULT			hresult;
 	int				reps;
 
-	int possible_rates[] = { 192000, 96000, 48000, 44100, 22050, 11025, 8000 };
+	int possible_rates[] = { 48000, 44100, 22050, 11025, 8000 };
 	int num_rates = sizeof(possible_rates) / sizeof(possible_rates[0]);
 	int selected_rate = 0;
 
