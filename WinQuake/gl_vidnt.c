@@ -912,7 +912,6 @@ void AppActivate(const SDL_Event* event)
 		IN_DeactivateMouse();
 		IN_ShowMouse();
 		ClearAllStates();
-		VID_HandlePause(true);
 	}
 	else
 	{
@@ -938,7 +937,6 @@ void AppActivate(const SDL_Event* event)
 			IN_ShowMouse();
 		}
 		ClearAllStates();
-		VID_HandlePause(false);
 	}
 }
 
