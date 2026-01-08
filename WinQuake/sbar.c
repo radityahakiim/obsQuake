@@ -930,15 +930,17 @@ void Sbar_Draw (void)
 	if (scr_con_current == vid.height)
 		return;		// console is full screen
 
-	if (sb_updates >= vid.numpages)
-		return;
+	//if (sb_updates >= vid.numpages)
+	//	return;
 
 	scr_copyeverything = 1;
 
 	sb_updates++;
 
-	if (sb_lines && vid.width > 320) 
-		Draw_TileClear (0, vid.height - sb_lines, vid.width, sb_lines);
+	if (scr_viewsize.value < 100) {
+		if (sb_lines && vid.width > 320)
+			Draw_TileClear(0, vid.height - sb_lines, vid.width, sb_lines);
+	}
 
 	if (sb_lines > 24)
 	{
