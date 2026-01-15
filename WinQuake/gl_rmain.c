@@ -44,6 +44,8 @@ int			cnttextures[2] = {-1, -1};     // cached
 int			particletexture;	// little dot for particles
 int			playertextures;		// up to 16 color translated skins
 
+float		player_alpha;		// player opacity
+
 int			mirrortexturenum;	// quake texturenum, not gltexturenum
 qboolean	mirror;
 mplane_t	*mirror_plane;
@@ -286,7 +288,7 @@ int	lastposenum;
 GL_DrawAliasFrame
 =============
 */
-void GL_DrawAliasFrame(aliashdr_t* hdr, int oldpose, int newpose, float lerp)
+void GL_DrawAliasFrame(aliashdr_t* hdr, int oldpose, int newpose, float lerp, float alpha)
 {
 
 	trivertx_t* oldv, * newv;
@@ -313,7 +315,7 @@ void GL_DrawAliasFrame(aliashdr_t* hdr, int oldpose, int newpose, float lerp)
 			float z = oldv->v[2] + lerp * (newv->v[2] - oldv->v[2]);
 
 			float l = shadedots[newv->lightnormalindex] * shadelight;
-			glColor3f(l, l, l);
+			glColor4f(l, l, l, alpha);
 			glVertex3f(x, y, z);
 
 			oldv++; newv++;
@@ -410,6 +412,9 @@ void R_DrawAliasModel (entity_t *e)
 	int			index;
 	float		s, t, an;
 	int			anim;
+
+	if (e == &cl_entities[cl.viewentity] && (!chase_active.value || chase_forcefirstperson))
+		return;
 
 	clmodel = currententity->model;
 
@@ -547,9 +552,35 @@ void R_DrawAliasModel (entity_t *e)
 
 	currententity->framelerp = dt;
 
+	// calculate alpha for player in third person view based on camera distance
+	float entity_alpha = 1.0f;
+	qboolean is_player = (currententity == &cl_entities[cl.viewentity]);
+	if (is_player && chase_active.value && !chase_forcefirstperson) {
+		vec3_t player_eye;
+		VectorCopy(currententity->origin, player_eye);
+		player_eye[2] += 22; // approx. eye height
+		vec3_t cam_to_player;
+		VectorSubtract(player_eye, r_refdef.vieworg, cam_to_player);
+		float dist = VectorLength(cam_to_player);
+		if (dist < 32.0f) {
+			entity_alpha = (dist - 12.0f) / 20.0f;
+			if (entity_alpha < 0.0f) entity_alpha = 0.0f;
+			if (entity_alpha > 1.0f) entity_alpha = 1.0f;
+			player_alpha = entity_alpha;
+			glEnable(GL_BLEND);
+			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+			glDepthMask(GL_FALSE); // prevent depth write for transparent parts
+		}
+	}
 
-	GL_DrawAliasFrame(paliashdr, f0, f1, currententity->framelerp);
+	GL_DrawAliasFrame(paliashdr, f0, f1, currententity->framelerp, entity_alpha);
 	lastposenum = currententity->frame;
+
+	// reset after drawing
+	if (entity_alpha < 1.0f) {
+		glDisable(GL_BLEND);
+		glDepthMask(GL_TRUE);
+	}
 
 	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
 
@@ -640,7 +671,7 @@ void R_DrawViewModel (void)
 	if (!r_drawviewmodel.value)
 		return;
 
-	if (chase_active.value)
+	if (chase_active.value && !chase_forcefirstperson)
 		return;
 
 	if (envmap)

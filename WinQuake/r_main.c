@@ -616,6 +616,9 @@ void R_DrawViewModel (void)
 	if (!r_drawviewmodel.value || r_fov_greater_than_90)
 		return;
 
+	if (chase_active.value && !chase_forcefirstperson)
+		return;
+
 	if (cl.items & IT_INVISIBILITY)
 		return;
 

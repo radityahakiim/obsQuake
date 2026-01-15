@@ -44,6 +44,7 @@ extern	int nanmask;
 #define VectorCopy(a,b) {b[0]=a[0];b[1]=a[1];b[2]=a[2];}
 
 void VectorMA (vec3_t veca, float scale, vec3_t vecb, vec3_t vecc);
+vec_t VectorLength(vec3_t v);
 
 vec_t _DotProduct (vec3_t v1, vec3_t v2);
 void _VectorSubtract (vec3_t veca, vec3_t vecb, vec3_t out);
