@@ -24,8 +24,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "d_local.h"
 #include "resource.h"
 
-#define MAX_MODE_LIST	30
-#define VID_ROW_SIZE	3
+#define MAX_MODE_LIST	100
+#define VID_ROW_SIZE	4
 
 qboolean	dibonly;
 
@@ -1508,9 +1508,9 @@ typedef struct
 	int		width;
 } modedesc_t;
 
-#define MAX_COLUMN_SIZE		5
+#define MAX_COLUMN_SIZE		9
 #define MODE_AREA_HEIGHT	(MAX_COLUMN_SIZE + 6)
-#define MAX_MODEDESCS		(MAX_COLUMN_SIZE*3)
+#define MAX_MODEDESCS		(MAX_COLUMN_SIZE*VID_ROW_SIZE)
 
 static modedesc_t	modedescs[MAX_MODEDESCS];
 
@@ -1551,7 +1551,7 @@ void VID_MenuDraw (void)
 		ptr = VID_GetModeDescriptionMemCheck (i);
 		pv = VID_GetModePtr (i);
 
-	// we only have room for 15 fullscreen modes, so don't allow
+	// we only have room for 36 fullscreen modes, so don't allow
 	// 360-wide modes, because if there are 5 320-wide modes and
 	// 5 360-wide modes, we'll run out of space
 		if (ptr && ((pv->width != 360) || COM_CheckParm("-allow360")))
@@ -1717,7 +1717,7 @@ void VID_MenuKey (int key)
 	case K_LEFTARROW:
 		S_LocalSound ("misc/menu1.wav");
 		vid_line = ((vid_line / VID_ROW_SIZE) * VID_ROW_SIZE) +
-				   ((vid_line + 2) % VID_ROW_SIZE);
+				   ((vid_line - 1) % VID_ROW_SIZE);
 
 		if (vid_line >= vid_wmodes)
 			vid_line = vid_wmodes - 1;
@@ -1726,7 +1726,7 @@ void VID_MenuKey (int key)
 	case K_RIGHTARROW:
 		S_LocalSound ("misc/menu1.wav");
 		vid_line = ((vid_line / VID_ROW_SIZE) * VID_ROW_SIZE) +
-				   ((vid_line + 4) % VID_ROW_SIZE);
+				   ((vid_line + 1) % VID_ROW_SIZE);
 
 		if (vid_line >= vid_wmodes)
 			vid_line = (vid_line / VID_ROW_SIZE) * VID_ROW_SIZE;
