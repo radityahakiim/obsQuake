@@ -780,6 +780,7 @@ int MapKey(int scancode)
 	{
 	case SDL_SCANCODE_ESCAPE:      return K_ESCAPE;
 	case SDL_SCANCODE_TAB:         return K_TAB;
+	case SDL_SCANCODE_KP_ENTER:
 	case SDL_SCANCODE_RETURN:      return K_ENTER;
 	case SDL_SCANCODE_SPACE:       return K_SPACE;
 	case SDL_SCANCODE_BACKSPACE:   return K_BACKSPACE;
@@ -842,6 +843,8 @@ int MapKey(int scancode)
 	case SDL_SCANCODE_BACKSLASH:   return '\\';
 	case SDL_SCANCODE_SLASH:       return '/';
 	case SDL_SCANCODE_GRAVE:       return '`';
+	case SDL_SCANCODE_COMMA:	   return ',';
+	case SDL_SCANCODE_PERIOD:	   return '.';
 
 	default:
 		break;

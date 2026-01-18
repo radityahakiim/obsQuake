@@ -1284,28 +1284,6 @@ void	VID_Update (vrect_t *rects)
 
 //==========================================================================
 
-byte        scantokey[128] = 
-					{ 
-//  0           1       2       3       4       5       6       7 
-//  8           9       A       B       C       D       E       F 
-	0  ,    27,     '1',    '2',    '3',    '4',    '5',    '6', 
-	'7',    '8',    '9',    '0',    '-',    '=',    K_BACKSPACE, 9, // 0 
-	'q',    'w',    'e',    'r',    't',    'y',    'u',    'i', 
-	'o',    'p',    '[',    ']',    13 ,    K_CTRL,'a',  's',      // 1 
-	'd',    'f',    'g',    'h',    'j',    'k',    'l',    ';', 
-	'\'' ,    '`',    K_SHIFT,'\\',  'z',    'x',    'c',    'v',      // 2 
-	'b',    'n',    'm',    ',',    '.',    '/',    K_SHIFT,'*', 
-	K_ALT,' ',   0  ,    K_F1, K_F2, K_F3, K_F4, K_F5,   // 3 
-	K_F6, K_F7, K_F8, K_F9, K_F10,  K_PAUSE,    0  , K_HOME, 
-	K_UPARROW,K_PGUP,'-',K_LEFTARROW,'5',K_RIGHTARROW,'+',K_END, //4 
-	K_DOWNARROW,K_PGDN,K_INS,K_DEL,0,0,             0,              K_F11, 
-	K_F12,0  ,    0  ,    0  ,    0  ,    0  ,    0  ,    0,        // 5
-	0  ,    0  ,    0  ,    0  ,    0  ,    0  ,    0  ,    0, 
-	0  ,    0  ,    0  ,    0  ,    0  ,    0  ,    0  ,    0,        // 6 
-	0  ,    0  ,    0  ,    0  ,    0  ,    0  ,    0  ,    0, 
-	0  ,    0  ,    0  ,    0  ,    0  ,    0  ,    0  ,    0         // 7 
-}; 
-
 /*
 =======
 MapKey
@@ -1319,6 +1297,7 @@ int MapKey(int scancode)
 	{
 	case SDL_SCANCODE_ESCAPE:      return K_ESCAPE;
 	case SDL_SCANCODE_TAB:         return K_TAB;
+	case SDL_SCANCODE_KP_ENTER:
 	case SDL_SCANCODE_RETURN:      return K_ENTER;
 	case SDL_SCANCODE_SPACE:       return K_SPACE;
 	case SDL_SCANCODE_BACKSPACE:   return K_BACKSPACE;
@@ -1381,6 +1360,8 @@ int MapKey(int scancode)
 	case SDL_SCANCODE_BACKSLASH:   return '\\';
 	case SDL_SCANCODE_SLASH:       return '/';
 	case SDL_SCANCODE_GRAVE:       return '`';
+	case SDL_SCANCODE_COMMA:	   return ',';
+	case SDL_SCANCODE_PERIOD:	   return '.';
 
 	default:
 		break;
