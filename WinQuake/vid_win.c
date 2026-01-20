@@ -30,14 +30,14 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 qboolean	dibonly;
 
 extern int		Minimized;
- HWND		mainwindow;
+ // HWND		mainwindow;
 
 // HWND WINAPI InitializeWindow (HINSTANCE hInstance, int nCmdShow);
 
-int			DIBWidth, DIBHeight;
+// int			DIBWidth, DIBHeight;
 qboolean	DDActive;
-RECT		WindowRect;
-DWORD		WindowStyle, ExWindowStyle;
+// RECT		WindowRect;
+// DWORD		WindowStyle, ExWindowStyle;
 
 int			window_center_x, window_center_y, window_x, window_y, window_width, window_height;
 RECT		window_rect;
@@ -793,7 +793,7 @@ int VID_SetMode (int modenum, unsigned char *palette)
 {
 	int				original_mode, temp, dummy;
 	qboolean		stat;
-    MSG				msg;
+    // MSG				msg;
 	// HDC				hdc;
 
 	while ((modenum >= nummodes) || (modenum < 0))
@@ -1105,8 +1105,8 @@ void VID_Minimize_f (void)
 
 // we only support minimizing windows; if you're fullscreen,
 // switch to windowed first
-	if (modestate == MS_WINDOWED)
-		ShowWindow (mainwindow, SW_MINIMIZE);
+	if (modestate == MS_WINDOWED && window)
+		SDL_MinimizeWindow (window);
 }
 
 
@@ -1241,8 +1241,10 @@ void	VID_Update (vrect_t *rects)
 	}
 
 	// blit quake surface to window
-	SDL_BlitSurface(quake_surface, NULL, screen_surface, NULL);
-	SDL_UpdateWindowSurface(window);
+	if (quake_surface && screen_surface && window) {
+		SDL_BlitSurface(quake_surface, NULL, screen_surface, NULL);
+		SDL_UpdateWindowSurface(window);
+	}
 
 	if (vid_testingmode)
 	{
@@ -1469,7 +1471,7 @@ MAIN WINDOW
 ===================================================================
 */
 
-LONG CDAudio_MessageHandler(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+// LONG CDAudio_MessageHandler(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
 extern void M_Menu_Options_f (void);
 extern void M_Print (int cx, int cy, char *str);
