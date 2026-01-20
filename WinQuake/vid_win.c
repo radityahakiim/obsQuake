@@ -1415,9 +1415,15 @@ int MapKey(int scancode)
 
 void AppActivate(const SDL_Event* event)
 {
-	Uint32 flags = SDL_GetWindowFlags(window);
-	qboolean focused = (flags & SDL_WINDOW_INPUT_FOCUS) ? true : false;
-	qboolean minimized = (flags & SDL_WINDOW_MINIMIZED) ? true : false;
+	Uint32 flags = 0;
+	qboolean focused = false;
+	qboolean minimized = false;
+
+	if (window) {
+		flags = SDL_GetWindowFlags(window);
+		focused = (flags & SDL_WINDOW_INPUT_FOCUS) ? true : false;
+		minimized = (flags & SDL_WINDOW_MINIMIZED) ? true : false;
+	}
 
 	ActiveApp = focused;
 	Minimized = minimized;
@@ -1444,6 +1450,13 @@ void AppActivate(const SDL_Event* event)
 	{
 		scr_skipupdate = false;
 
+		if (window) {
+			SDL_Surface* new_screen = SDL_GetWindowSurface(window);
+			if (new_screen) {
+				screen_surface = new_screen;
+			}
+		}
+
 		S_UnblockSound();
 		CDAudio_Resume();
 
@@ -1465,6 +1478,15 @@ void AppActivate(const SDL_Event* event)
 		}
 		ClearAllStates();
 		VID_HandlePause(false);
+
+		// reapply palette and force surface update to avoid permanent freeze
+		if (quake_surface && screen_surface) {
+			VID_SetPalette(vid_curpal);
+			VID_UpdateWindowStatus();
+			SDL_BlitSurface(quake_surface, NULL, screen_surface, NULL);
+			SDL_UpdateWindowSurface(window);
+			SDL_PumpEvents();
+		}
 	}
 }
 
