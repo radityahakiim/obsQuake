@@ -462,7 +462,7 @@ void VID_InitModes(void) {
 					modelist[nummodes].width = mode.w;
 					modelist[nummodes].height = mode.h;
 					sprintf(modelist[nummodes].modedesc, "%dx%d", mode.w, mode.h);
-					modelist[nummodes].modenum = MODE_FULLSCREEN_DEFAULT + (nummodes - 3); // offset after windowed
+					modelist[nummodes].modenum = nummodes; // offset after windowed
 					modelist[nummodes].stretched = 0;
 					modelist[nummodes].dib = 0;
 					modelist[nummodes].fullscreen = 1;
@@ -503,9 +503,14 @@ qboolean VID_SetWindowedMode (int modenum)
 	window = NULL;
 
 	Uint32 flags = SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE;
+
+	// center automatically
+	int posx = SDL_WINDOWPOS_CENTERED;
+	int posy = SDL_WINDOWPOS_CENTERED;
+
 	window = SDL_CreateWindow("WinQuake",
-		(int)vid_window_x.value,
-		(int)vid_window_y.value,
+		posx,
+		posy,
 		modelist[modenum].width,
 		modelist[modenum].height,
 		flags);
@@ -539,6 +544,10 @@ qboolean VID_SetWindowedMode (int modenum)
 	vid_fulldib_on_focus_mode = 0;
 
 	VID_UpdateWindowStatus();
+
+	// store to cvar for later use
+	Cvar_SetValue("vid_window_x", (float)window_x);
+	Cvar_SetValue("vid_window_y", (float)window_y);
 
 	if (_windowed_mouse.value) {
 		IN_ActivateMouse();
@@ -1216,7 +1225,7 @@ void	VID_Shutdown (void)
 	}
 }
 
-void	VID_Update (vrect_t *rects)
+void	VID_Update(vrect_t* rects)
 {
 	vrect_t	rect;
 
@@ -1280,6 +1289,28 @@ void	VID_Update (vrect_t *rects)
 			}
 
 			windowed_mouse = (int)_windowed_mouse.value;
+		}
+	}
+	// show cursor on pause
+	if (key_dest != key_game || cl.paused)
+	{
+		if (mouseactive)
+			IN_DeactivateMouse();
+		IN_ShowMouse();
+	}
+	else
+	{
+		// game input active: restore mouse behavior based on _windowed_mouse
+		if (modestate == MS_FULLSCREEN ||
+			(modestate == MS_WINDOWED && _windowed_mouse.value && key_dest == key_game))
+		{
+			IN_ActivateMouse();
+			IN_HideMouse();
+		}
+		else
+		{
+			IN_DeactivateMouse();
+			IN_ShowMouse();
 		}
 	}
 }
@@ -1502,48 +1533,55 @@ static modedesc_t	modedescs[MAX_MODEDESCS];
 VID_MenuDraw
 ================
 */
-void VID_MenuDraw (void)
+void VID_MenuDraw(void)
 {
-	qpic_t		*p;
-	char		*ptr;
+	qpic_t*		p;
+	char*		ptr;
 	int			lnummodes, i, j, k, column, row, dup, dupmode;
 	char		temp[100];
-	vmode_t		*pv;
+	vmode_t*	pv;
 	modedesc_t	tmodedesc;
 
-	p = Draw_CachePic ("gfx/vidmodes.lmp");
-	M_DrawPic ( (320-p->width)/2, 4, p);
+	p = Draw_CachePic("gfx/vidmodes.lmp");
+	M_DrawPic((320 - p->width) / 2, 4, p);
 
-	for (i=0 ; i<3 ; i++)
-	{
-		ptr = VID_GetModeDescriptionMemCheck (i);
-		modedescs[i].modenum = modelist[i].modenum;
-		modedescs[i].desc = ptr;
+	// clear any stale entries so leftover data doesn't mis-map selections
+	for (i = 0; i < MAX_MODEDESCS; i++) {
+		modedescs[i].modenum = -1;
+		modedescs[i].desc = NULL;
 		modedescs[i].ismode13 = 0;
 		modedescs[i].iscur = 0;
+		modedescs[i].width = 0;
+	}
 
-		if (vid_modenum == i)
-			modedescs[i].iscur = 1;
+	for (i = 0; i < 3; i++)
+	{
+		ptr = VID_GetModeDescription(i);
+		modedescs[i].modenum = i;
+		modedescs[i].desc = ptr;
+		modedescs[i].ismode13 = modelist[i].mode13;
+		modedescs[i].iscur = (vid_modenum == i);
+		modedescs[i].width = modelist[i].width;
 	}
 
 	vid_wmodes = 3;
-	lnummodes = VID_NumModes ();
-	
-	for (i=3 ; i<lnummodes ; i++)
-	{
-		ptr = VID_GetModeDescriptionMemCheck (i);
-		pv = VID_GetModePtr (i);
+	lnummodes = VID_NumModes();
 
-	// we only have room for 36 fullscreen modes, so don't allow
-	// 360-wide modes, because if there are 5 320-wide modes and
-	// 5 360-wide modes, we'll run out of space
+	for (i = 3; i < lnummodes; i++)
+	{
+		ptr = VID_GetModeDescription(i);
+		pv = VID_GetModePtr(i);
+
+		// we only have room for 15 fullscreen modes, so don't allow
+		// 360-wide modes, because if there are 5 320-wide modes and
+		// 5 360-wide modes, we'll run out of space
 		if (ptr && ((pv->width != 360) || COM_CheckParm("-allow360")))
 		{
 			dup = 0;
 
-			for (j=3 ; j<vid_wmodes ; j++)
+			for (j = 3; j < vid_wmodes; j++)
 			{
-				if (!strcmp (modedescs[j].desc, ptr))
+				if (!strcmp(modedescs[j].desc, ptr))
 				{
 					dup = 1;
 					dupmode = j;
@@ -1551,7 +1589,7 @@ void VID_MenuDraw (void)
 				}
 			}
 
-			if (dup || (vid_wmodes < MAX_MODEDESCS))       
+			if (dup || (vid_wmodes < MAX_MODEDESCS))
 			{
 				if (!dup || !modedescs[dupmode].ismode13 || COM_CheckParm("-noforcevga"))
 				{
@@ -1580,11 +1618,11 @@ void VID_MenuDraw (void)
 		}
 	}
 
-// sort the modes on width (to handle picking up oddball dibonly modes
-// after all the others)
-	for (i=3 ; i<(vid_wmodes-1) ; i++)
+	// sort the modes on width (to handle picking up oddball dibonly modes
+	// after all the others)
+	for (i = 3; i < (vid_wmodes - 1); i++)
 	{
-		for (j=(i+1) ; j<vid_wmodes ; j++)
+		for (j = (i + 1); j < vid_wmodes; j++)
 		{
 			if (modedescs[i].width > modedescs[j].width)
 			{
@@ -1596,36 +1634,36 @@ void VID_MenuDraw (void)
 	}
 
 
-	M_Print (13*8, 36, "Windowed Modes");
+	M_Print(13 * 8, 36, "Windowed Modes");
 
 	column = 16;
-	row = 36+2*8;
+	row = 36 + 2 * 8;
 
-	for (i=0 ; i<3; i++)
+	for (i = 0; i < 3; i++)
 	{
 		if (modedescs[i].iscur)
-			M_PrintWhite (column, row, modedescs[i].desc);
+			M_PrintWhite(column, row, modedescs[i].desc);
 		else
-			M_Print (column, row, modedescs[i].desc);
+			M_Print(column, row, modedescs[i].desc);
 
-		column += 13*8;
+		column += 13 * 8;
 	}
 
 	if (vid_wmodes > 3)
 	{
-		M_Print (12*8, 36+4*8, "Fullscreen Modes");
+		M_Print(12 * 8, 36 + 4 * 8, "Fullscreen Modes");
 
 		column = 16;
-		row = 36+6*8;
+		row = 36 + 6 * 8;
 
-		for (i=3 ; i<vid_wmodes ; i++)
+		for (i = 3; i < vid_wmodes; i++)
 		{
 			if (modedescs[i].iscur)
-				M_PrintWhite (column, row, modedescs[i].desc);
+				M_PrintWhite(column, row, modedescs[i].desc);
 			else
-				M_Print (column, row, modedescs[i].desc);
+				M_Print(column, row, modedescs[i].desc);
 
-			column += 13*8;
+			column += 13 * 8;
 
 			if (((i - 3) % VID_ROW_SIZE) == (VID_ROW_SIZE - 1))
 			{
@@ -1635,47 +1673,50 @@ void VID_MenuDraw (void)
 		}
 	}
 
-// line cursor
+	// line cursor
 	if (vid_testingmode)
 	{
-		sprintf (temp, "TESTING %s",
-				modedescs[vid_line].desc);
-		M_Print (13*8, 36 + MODE_AREA_HEIGHT * 8 + 8*4, temp);
-		M_Print (9*8, 36 + MODE_AREA_HEIGHT * 8 + 8*6,
-				"Please wait 5 seconds...");
+		sprintf(temp, "TESTING %s",
+			modedescs[vid_line].desc);
+		M_Print(13 * 8, 36 + MODE_AREA_HEIGHT * 8 + 8 * 4, temp);
+		M_Print(9 * 8, 36 + MODE_AREA_HEIGHT * 8 + 8 * 6,
+			"Please wait 5 seconds...");
 	}
 	else
 	{
-		M_Print (9*8, 36 + MODE_AREA_HEIGHT * 8 + 8,
-				"Press Enter to set mode");
-		M_Print (6*8, 36 + MODE_AREA_HEIGHT * 8 + 8*3,
-				"T to test mode for 5 seconds");
-		ptr = VID_GetModeDescription2 (vid_modenum);
+		M_Print(9 * 8, 36 + MODE_AREA_HEIGHT * 8 + 8,
+			"Press Enter to set mode");
+		M_Print(6 * 8, 36 + MODE_AREA_HEIGHT * 8 + 8 * 3,
+			"T to test mode for 5 seconds");
+		ptr = VID_GetModeDescription2(vid_modenum);
 
 		if (ptr)
 		{
-			sprintf (temp, "D to set default: %s", ptr);
-			M_Print (2*8, 36 + MODE_AREA_HEIGHT * 8 + 8*5, temp);
+			sprintf(temp, "D to set default: %s", ptr);
+			M_Print(2 * 8, 36 + MODE_AREA_HEIGHT * 8 + 8 * 5, temp);
 		}
 
-		ptr = VID_GetModeDescription2 ((int)_vid_default_mode_win.value);
+		ptr = VID_GetModeDescription2((int)_vid_default_mode_win.value);
 
 		if (ptr)
 		{
-			sprintf (temp, "Current default: %s", ptr);
-			M_Print (3*8, 36 + MODE_AREA_HEIGHT * 8 + 8*6, temp);
+			sprintf(temp, "Current default: %s", ptr);
+			M_Print(3 * 8, 36 + MODE_AREA_HEIGHT * 8 + 8 * 6, temp);
 		}
 
-		M_Print (15*8, 36 + MODE_AREA_HEIGHT * 8 + 8*8,
-				"Esc to exit");
+		M_Print(15 * 8, 36 + MODE_AREA_HEIGHT * 8 + 8 * 8,
+			"Esc to exit");
 
-		row = 36 + 2*8 + (vid_line / VID_ROW_SIZE) * 8;
-		column = 8 + (vid_line % VID_ROW_SIZE) * 13*8;
+		if (vid_line < 3) {
+			row = 36 + 2 * 8;
+			column = 16 + (vid_line % VID_ROW_SIZE) * 13 * 8;
+		}
+		else {
+			row = 36 + 6 * 8 + ((vid_line - 3) / VID_ROW_SIZE) * 8;
+			column = 16 + ((vid_line - 3) % VID_ROW_SIZE) * 13 * 8;
+		}
 
-		if (vid_line >= 3)
-			row += 3*8;
-
-		M_DrawCharacter (column, row, 12+((int)(realtime*4)&1));
+		M_DrawCharacter(column - 8, row, 12 + ((int)(realtime * 4) & 1));
 	}
 }
 
@@ -1685,7 +1726,7 @@ void VID_MenuDraw (void)
 VID_MenuKey
 ================
 */
-void VID_MenuKey (int key)
+void VID_MenuKey(int key)
 {
 	if (vid_testingmode)
 		return;
@@ -1693,81 +1734,85 @@ void VID_MenuKey (int key)
 	switch (key)
 	{
 	case K_ESCAPE:
-		S_LocalSound ("misc/menu1.wav");
-		M_Menu_Options_f ();
+		S_LocalSound("misc/menu1.wav");
+		M_Menu_Options_f();
 		break;
 
 	case K_LEFTARROW:
-		S_LocalSound ("misc/menu1.wav");
-		vid_line = ((vid_line / VID_ROW_SIZE) * VID_ROW_SIZE) +
-				   ((vid_line - 1) % VID_ROW_SIZE);
-
+		S_LocalSound("misc/menu1.wav");
+		vid_line--;
+		if (vid_line < 0)
+			vid_line = 0;
 		if (vid_line >= vid_wmodes)
 			vid_line = vid_wmodes - 1;
 		break;
 
 	case K_RIGHTARROW:
-		S_LocalSound ("misc/menu1.wav");
-		vid_line = ((vid_line / VID_ROW_SIZE) * VID_ROW_SIZE) +
-				   ((vid_line + 1) % VID_ROW_SIZE);
-
+		S_LocalSound("misc/menu1.wav");
+		vid_line++;
+		if (vid_line < 0)
+			vid_line = 0;
 		if (vid_line >= vid_wmodes)
-			vid_line = (vid_line / VID_ROW_SIZE) * VID_ROW_SIZE;
+			vid_line = vid_wmodes - 1;
 		break;
 
 	case K_UPARROW:
-		S_LocalSound ("misc/menu1.wav");
+		S_LocalSound("misc/menu1.wav");
 		vid_line -= VID_ROW_SIZE;
-
 		if (vid_line < 0)
-		{
-			vid_line += ((vid_wmodes + (VID_ROW_SIZE - 1)) /
-					VID_ROW_SIZE) * VID_ROW_SIZE;
-
-			while (vid_line >= vid_wmodes)
-				vid_line -= VID_ROW_SIZE;
-		}
+			vid_line = 0;
+		if (vid_line >= vid_wmodes)
+			vid_line = vid_wmodes - 1;
 		break;
 
 	case K_DOWNARROW:
-		S_LocalSound ("misc/menu1.wav");
+		S_LocalSound("misc/menu1.wav");
 		vid_line += VID_ROW_SIZE;
-
+		if (vid_line < 0)
+			vid_line = 0;
 		if (vid_line >= vid_wmodes)
-		{
-			vid_line -= ((vid_wmodes + (VID_ROW_SIZE - 1)) /
-					VID_ROW_SIZE) * VID_ROW_SIZE;
-
-			while (vid_line < 0)
-				vid_line += VID_ROW_SIZE;
-		}
+			vid_line = vid_wmodes - 1;
 		break;
 
 	case K_ENTER:
-		S_LocalSound ("misc/menu1.wav");
-		VID_SetMode (modedescs[vid_line].modenum, vid_curpal);
+	{
+		S_LocalSound("misc/menu1.wav");
+		int sel = modedescs[vid_line].modenum;
+		if (sel >= 0 && sel < nummodes) {
+			VID_SetMode(sel, vid_curpal);
+		}
 		break;
+	}
 
 	case 'T':
 	case 't':
-		S_LocalSound ("misc/menu1.wav");
-	// have to set this before setting the mode because WM_PAINT
-	// happens during the mode set and does a VID_Update, which
-	// checks vid_testingmode
+		S_LocalSound("misc/menu1.wav");
+		// have to set this before setting the mode because WM_PAINT
+		// happens during the mode set and does a VID_Update, which
+		// checks vid_testingmode
 		vid_testingmode = 1;
 		vid_testendtime = realtime + 5.0;
-
-		if (!VID_SetMode (modedescs[vid_line].modenum, vid_curpal))
 		{
-			vid_testingmode = 0;
+			int sel = modedescs[vid_line].modenum;
+			if (sel >= 0 && sel < nummodes)
+			{
+				if (!VID_SetMode(sel, vid_curpal))
+				{
+					vid_testingmode = 0;
+				}
+			}
+			else
+			{
+				vid_testingmode = 0;
+			}
 		}
 		break;
 
 	case 'D':
 	case 'd':
-		S_LocalSound ("misc/menu1.wav");
+		S_LocalSound("misc/menu1.wav");
 		firstupdate = 0;
-		Cvar_SetValue ("_vid_default_mode_win", vid_modenum);
+		Cvar_SetValue("_vid_default_mode_win", vid_modenum);
 		break;
 
 	default:
