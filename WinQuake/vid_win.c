@@ -179,6 +179,69 @@ void HandleEvents()
 				if (event.window.event == SDL_WINDOWEVENT_RESTORED)
 					VID_UpdateWindowStatus();
 				break;
+			case SDL_WINDOWEVENT_RESIZED:
+			case SDL_WINDOWEVENT_SIZE_CHANGED:
+			{
+				int new_w = event.window.data1;
+				int new_h = event.window.data2;
+
+				// update cached window size
+				window_width = new_w;
+				window_height = new_h;
+				VID_UpdateWindowStatus();
+
+				if (modestate == MS_WINDOWED && window)
+				{
+					// update the window surface reference
+					SDL_Surface* new_screen = SDL_GetWindowSurface(window);
+					if (new_screen)
+						screen_surface = new_screen;
+
+					// recreate quake_surface at the new size
+					if (quake_surface)
+					{
+						SDL_FreeSurface(quake_surface);
+						quake_surface = NULL;
+					}
+
+					quake_surface = SDL_CreateRGBSurface(0, new_w, new_h, 8, 0, 0, 0, 0);
+					if (!quake_surface)
+					{
+						Con_SafePrintf("SDL_CreateRGBSurface failed on resize: %s\n", SDL_GetError());
+						break;
+					}
+
+					// point vid at the new surface and update geometry
+					vid.buffer = vid.conbuffer = vid.direct = (byte*)quake_surface->pixels;
+					vid.rowbytes = vid.conrowbytes = quake_surface->pitch;
+					vid.numpages = 1;
+					vid.maxwarpwidth = WARP_WIDTH;
+					vid.maxwarpheight = WARP_HEIGHT;
+					vid.height = vid.conheight = new_h;
+					vid.width = vid.conwidth = new_w;
+					vid.aspect = ((float)vid.height / (float)vid.width) * (320.0 / 240.0);
+
+					if (!VID_AllocBuffers(vid.width, vid.height))
+					{
+						Con_SafePrintf("Not enough memory for resized video buffers\n");
+					}
+					else
+					{
+						D_InitCaches(vid_surfcache, vid_surfcachesize);
+					}
+
+					// reapply palette so the new 8-bit surface has correct colors
+					VID_SetPalette(vid_curpal);
+
+					vid.recalc_refdef = 1; // force recalc so view/3D viewport matches
+					VID_UpdateWindowStatus();
+
+					// store to cvar for later use
+					Cvar_SetValue("vid_window_x", (float)window_x);
+					Cvar_SetValue("vid_window_y", (float)window_y);
+				}
+			}
+			break;
 			}
 			break;
 		case SDL_KEYDOWN:
