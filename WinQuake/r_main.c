@@ -229,12 +229,6 @@ void R_Init (void)
 
 	R_InitParticles ();
 
-// TODO: collect 386-specific code in one place
-#if	id386
-	Sys_MakeCodeWriteable ((long)R_EdgeCodeStart,
-					     (long)R_EdgeCodeEnd - (long)R_EdgeCodeStart);
-#endif	// id386
-
 	D_Init ();
 }
 
@@ -269,7 +263,7 @@ void R_NewMap (void)
 	// surface 0 doesn't really exist; it's just a dummy because index 0
 	// is used to indicate no edge attached to surface
 		surfaces--;
-		R_SurfacePatch ();
+	//	R_SurfacePatch ();
 	}
 	else
 	{
@@ -460,24 +454,6 @@ void R_ViewChanged (vrect_t *pvrect, int lineadj, float aspect)
 		r_fov_greater_than_90 = false;
 	else
 		r_fov_greater_than_90 = true;
-
-// TODO: collect 386-specific code in one place
-#if	id386
-	if (r_pixbytes == 1)
-	{
-		Sys_MakeCodeWriteable ((long)R_Surf8Start,
-						     (long)R_Surf8End - (long)R_Surf8Start);
-		colormap = vid.colormap;
-		R_Surf8Patch ();
-	}
-	else
-	{
-		Sys_MakeCodeWriteable ((long)R_Surf16Start,
-						     (long)R_Surf16End - (long)R_Surf16Start);
-		colormap = vid.colormap16;
-		R_Surf16Patch ();
-	}
-#endif	// id386
 
 	D_ViewChanged ();
 }
@@ -901,7 +877,7 @@ void R_EdgeDrawing (void)
 	// surface 0 doesn't really exist; it's just a dummy because index 0
 	// is used to indicate no edge attached to surface
 		surfaces--;
-		R_SurfacePatch ();
+		// R_SurfacePatch ();
 	}
 
 	R_BeginEdgeFrame ();
@@ -974,7 +950,7 @@ SetVisibilityByPassages ();
 // while, so we don't do it globally.  This also sets chop mode, and we do it
 // here so that setup stuff like the refresh area calculations match what's
 // done in screen.c
-	Sys_LowFPPrecision ();
+//	Sys_LowFPPrecision ();
 
 	if (!cl_entities[0].model || !cl.worldmodel)
 		Sys_Error ("R_RenderView: NULL worldmodel");
@@ -1046,7 +1022,7 @@ SetVisibilityByPassages ();
 		Con_Printf ("Short roughly %d edges\n", r_outofedges * 2 / 3);
 
 // back to high floating-point precision
-	Sys_HighFPPrecision ();
+//	Sys_HighFPPrecision ();
 }
 
 void R_RenderView (void)

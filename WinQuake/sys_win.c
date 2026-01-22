@@ -49,7 +49,7 @@ static HANDLE	hFile;
 static HANDLE	heventParent;
 static HANDLE	heventChild;
 
-void MaskExceptions (void);
+//void MaskExceptions (void);
 void Sys_InitFloatTime (void);
 void Sys_PushFPCW_SetHigh (void);
 void Sys_PopFPCW (void);
@@ -267,8 +267,6 @@ void Sys_MakeCodeWriteable (unsigned long startaddr, unsigned long length)
 }
 
 
-#ifndef _M_IX86
-
 void Sys_SetFPCW (void)
 {
 }
@@ -285,7 +283,6 @@ void MaskExceptions (void)
 {
 }
 
-#endif
 
 /*
 ================
@@ -298,7 +295,7 @@ void Sys_Init (void)
 	unsigned int	lowpart, highpart;
 	OSVERSIONINFO	vinfo;
 
-	MaskExceptions ();
+	//MaskExceptions ();
 	Sys_SetFPCW ();
 
 	if (!QueryPerformanceFrequency (&PerformanceFreq))

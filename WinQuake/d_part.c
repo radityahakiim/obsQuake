@@ -45,7 +45,7 @@ void D_StartParticles (void)
 }
 
 
-#if	!id386
+
 
 /*
 ==============
@@ -203,5 +203,5 @@ void D_DrawParticle (particle_t *pparticle)
 	}
 }
 
-#endif	// !id386
+
 
