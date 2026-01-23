@@ -518,7 +518,10 @@ void R_DrawEntitiesOnList (void)
 		currententity = cl_visedicts[i];
 
 		if (currententity == &cl_entities[cl.viewentity])
-			continue;	// don't draw the player
+		{
+			if (!(chase_active.value && !chase_forcefirstperson))
+				continue; // dont draw player on first person
+		}
 
 		switch (currententity->model->type)
 		{
@@ -589,7 +592,7 @@ void R_DrawViewModel (void)
 	float		add;
 	dlight_t	*dl;
 	
-	if (!r_drawviewmodel.value || r_fov_greater_than_90)
+	if (!r_drawviewmodel.value)
 		return;
 
 	if (chase_active.value && !chase_forcefirstperson)
@@ -604,6 +607,24 @@ void R_DrawViewModel (void)
 	currententity = &cl.viewent;
 	if (!currententity->model)
 		return;
+
+	// save original viewent origin for to be restored after drawing
+	vec3_t saved_entorigin;
+	VectorCopy(currententity->origin, saved_entorigin);
+
+	// move the viewmodel forward/backward every time the fov increases/decreases
+	if (scr_fov.value > 90.0f)
+	{
+		float factor = tan(scr_fov.value / 360.0f * M_PI);
+		if (factor < 1.0f) factor = 1.0f; // safeguard
+
+		// how aggresively the gun moves forward per extra-FOV
+		const float forward_scale = 5.6f;
+		float forward_offset = (factor - 1.0f) * forward_scale;
+		if (forward_offset > 80.0f) forward_offset = 80.0f;
+
+		VectorMA(currententity->origin, forward_offset, vpn, currententity->origin);
+	}
 
 	VectorCopy (currententity->origin, r_entorigin);
 	VectorSubtract (r_origin, r_entorigin, modelorg);
@@ -647,7 +668,40 @@ void R_DrawViewModel (void)
 	cl.light_level = r_viewlighting.ambientlight;
 #endif
 
-	R_AliasDrawModel (&r_viewlighting);
+	// section handle fov > 90 for software renderer
+	// save and restore global scale values so world rendering is unaffected
+	float old_xscale = xscale;
+	float old_yscale = yscale;
+	float old_aliasxscale = aliasxscale;
+	float old_aliasyscale = aliasyscale;
+	float old_aliasxcenter = aliasxcenter;
+	float old_aliasycenter = aliasycenter;
+
+	if (scr_fov.value > 90.0f)
+	{
+		// for fov factor larger than 1, multiply alias scales by factor
+		// to counteract the wider projection so the model appears at 
+		// a similar screen size
+		float factor = tan(scr_fov.value / 360.0f * M_PI);
+		if (factor < 0.0001f) factor = 0.0001f; // safety clamp
+		
+		// apply scaling for both world and alias scales used by the software alias renderer.
+		// this keeps projection math consistent for alias models (viewmodel)
+		xscale *= factor;
+		yscale *= factor;
+		aliasxscale *= factor;
+		aliasyscale *= factor;
+	}
+
+	R_AliasDrawModel(&r_viewlighting);
+
+	// restore scales so ordinary world/entity rendering remain unchanged
+	xscale = old_xscale;
+	yscale = old_yscale;
+	aliasxscale = old_aliasxscale;
+	aliasyscale = old_aliasyscale;
+	aliasxcenter = old_aliasxcenter;
+	aliasycenter = old_aliasycenter;
 }
 
 
