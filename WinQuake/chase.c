@@ -155,7 +155,7 @@ void Chase_Update(void)
 	trace_t los = TraceLine(chase_dest, player_org);
 
 	// force first person if camera view is blocked or too close
-	if ((los.fraction < 0.0f || cam_dist < 8) && player_alpha < 0.05)
+	if ((los.fraction < 1.0f || cam_dist < 8) && player_alpha < 0.05)
 	{
 		chase_forcefirstperson = true;
 	}
