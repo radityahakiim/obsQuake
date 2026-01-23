@@ -412,7 +412,7 @@ void R_ViewChanged (vrect_t *pvrect, int lineadj, float aspect)
 	r_refdef.aliasvrectbottom = r_refdef.aliasvrect.y +
 			r_refdef.aliasvrect.height;
 
-	pixelAspect = aspect;
+	pixelAspect = 1;
 	xOrigin = r_refdef.xOrigin;
 	yOrigin = r_refdef.yOrigin;
 	
