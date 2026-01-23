@@ -435,60 +435,6 @@
     </Image>
   </ItemGroup>
   <ItemGroup>
-    <CustomBuild Include="d_draw.s">
-      <Filter>Source Files</Filter>
-    </CustomBuild>
-    <CustomBuild Include="d_draw16.s">
-      <Filter>Source Files</Filter>
-    </CustomBuild>
-    <CustomBuild Include="d_parta.s">
-      <Filter>Source Files</Filter>
-    </CustomBuild>
-    <CustomBuild Include="d_polysa.s">
-      <Filter>Source Files</Filter>
-    </CustomBuild>
-    <CustomBuild Include="d_scana.s">
-      <Filter>Source Files</Filter>
-    </CustomBuild>
-    <CustomBuild Include="d_spr8.s">
-      <Filter>Source Files</Filter>
-    </CustomBuild>
-    <CustomBuild Include="d_varsa.s">
-      <Filter>Source Files</Filter>
-    </CustomBuild>
-    <CustomBuild Include="math.s">
-      <Filter>Source Files</Filter>
-    </CustomBuild>
-    <CustomBuild Include="r_aclipa.s">
-      <Filter>Source Files</Filter>
-    </CustomBuild>
-    <CustomBuild Include="r_aliasa.s">
-      <Filter>Source Files</Filter>
-    </CustomBuild>
-    <CustomBuild Include="r_drawa.s">
-      <Filter>Source Files</Filter>
-    </CustomBuild>
-    <CustomBuild Include="r_edgea.s">
-      <Filter>Source Files</Filter>
-    </CustomBuild>
-    <CustomBuild Include="r_varsa.s">
-      <Filter>Source Files</Filter>
-    </CustomBuild>
-    <CustomBuild Include="snd_mixa.s">
-      <Filter>Source Files</Filter>
-    </CustomBuild>
-    <CustomBuild Include="surf16.s">
-      <Filter>Source Files</Filter>
-    </CustomBuild>
-    <CustomBuild Include="surf8.s">
-      <Filter>Source Files</Filter>
-    </CustomBuild>
-    <CustomBuild Include="sys_wina.s">
-      <Filter>Source Files</Filter>
-    </CustomBuild>
-    <CustomBuild Include="worlda.s">
-      <Filter>Source Files</Filter>
-    </CustomBuild>
     <CustomBuild Include="progdefs.q1" />
     <CustomBuild Include="progdefs.q2" />
   </ItemGroup>
