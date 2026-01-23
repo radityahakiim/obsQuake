@@ -303,16 +303,46 @@ R_SetVrect
 */
 void R_SetVrect (vrect_t *pvrectin, vrect_t *pvrect, int lineadj)
 {
-	int		h;
-	float	size;
+	int		 h;
+	float	 size;
+	qboolean full = false;
 
-	size = scr_viewsize.value > 100 ? 100 : scr_viewsize.value;
+	if (scr_viewsize.value >= 100) {
+		size = 100;
+		full = true;
+	}
+	else {
+		size = scr_viewsize.value;
+	}
 	if (cl.intermission)
 	{
+		full = true;
 		size = 100;
 		lineadj = 0;
 	}
 	size /= 100;
+
+	if (full)
+	{
+		pvrect->width = pvrectin->width;
+		pvrect->height = pvrectin->height;
+
+		// keep a minimum width for icons, and align
+		if (pvrect->width < 96) pvrect->width = 96;
+		pvrect->width &= ~7;
+		pvrect->height &= ~1;
+
+		// center at (0,0) so the sbar can be rendered on top of 3D viewport
+		pvrect->x = 0;
+		pvrect->y = 0;
+
+		if (lcd_x.value)
+		{
+			pvrect->y >>= 1;
+			pvrect->height >>= 1;
+		}
+		return;
+	}
 
 	h = pvrectin->height - lineadj;
 	pvrect->width = pvrectin->width * size;
