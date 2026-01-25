@@ -565,7 +565,7 @@ qboolean VID_SetWindowedMode (int modenum)
 	if (window) SDL_DestroyWindow(window);
 	window = NULL;
 
-	Uint32 flags = SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE;
+	Uint32 flags = SDL_WINDOW_SHOWN;
 
 	// center automatically
 	int posx = SDL_WINDOWPOS_CENTERED;
