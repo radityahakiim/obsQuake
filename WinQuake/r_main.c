@@ -649,7 +649,7 @@ void R_DrawViewModel (void)
 		if (factor < 1.0f) factor = 1.0f; // safeguard
 
 		// how aggresively the gun moves forward per extra-FOV
-		const float forward_scale = 5.6f;
+		const float forward_scale = 8.0f;
 		float forward_offset = (factor - 1.0f) * forward_scale;
 		if (forward_offset > 80.0f) forward_offset = 80.0f;
 
