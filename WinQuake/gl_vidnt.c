@@ -726,9 +726,18 @@ void	VID_ShiftPalette(unsigned char* palette)
 {
 	extern	byte ramps[3][256];
 
-	//	VID_SetPalette (palette);
+	Uint16 red[256], green[256], blue[256];
+	int i;
 
-	//	gammaworks = SetDeviceGammaRamp (maindc, ramps);
+	if (!window) return;
+
+	for (i = 0; i < 256; i++) {
+		red[i]   = (Uint16)ramps[0][i] * 257;
+		green[i] = (Uint16)ramps[1][i] * 257;
+		blue[i]  = (Uint16)ramps[2][i] * 257;
+	}
+
+	SDL_SetWindowGammaRamp(window, red, green, blue);
 }
 
 
@@ -1352,32 +1361,16 @@ void VID_Init8bitPalette()
 
 static void Check_Gamma(unsigned char* pal)
 {
-	float	f, inf;
-	unsigned char	palette[768];
-	int		i;
+	int i;
+	float f, inf;
 
-	if ((i = COM_CheckParm("-gamma")) == 0) {
-		if ((gl_renderer && strstr(gl_renderer, "Voodoo")) ||
-			(gl_vendor && strstr(gl_vendor, "3Dfx")))
-			vid_gamma = 1;
-		else
-			vid_gamma = 0.7; // default to 0.7 on non-3dfx hardware
-	}
-	else
+	// command-line override
+	if ((i = COM_CheckParm("-gamma")) != 0) {
 		vid_gamma = Q_atof(com_argv[i + 1]);
-
-	for (i = 0; i < 768; i++)
-	{
-		f = pow((pal[i] + 1) / 256.0, vid_gamma);
-		inf = f * 255 + 0.5;
-		if (inf < 0)
-			inf = 0;
-		if (inf > 255)
-			inf = 255;
-		palette[i] = inf;
 	}
-
-	memcpy(pal, palette, sizeof(palette));
+	else {
+		vid_gamma = 1.0f;
+	}
 }
 
 /*
