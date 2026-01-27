@@ -460,10 +460,10 @@ void IN_MouseMove(usercmd_t* cmd)
 	if ((in_mlook.state & 1) && !(in_strafe.state & 1))
 	{
 		cl.viewangles[PITCH] += m_pitch.value * mouse_y;
-		if (cl.viewangles[PITCH] > 80)
-			cl.viewangles[PITCH] = 80;
-		if (cl.viewangles[PITCH] < -70)
-			cl.viewangles[PITCH] = -70;
+		if (cl.viewangles[PITCH] > 90)
+			cl.viewangles[PITCH] = 90;
+		if (cl.viewangles[PITCH] < -90)
+			cl.viewangles[PITCH] = -90;
 	}
 	else {
 		if ((in_strafe.state & 1) && noclip_anglehack)
@@ -961,8 +961,8 @@ void IN_JoyMove (usercmd_t *cmd)
 	}
 
 	// bounds check pitch
-	if (cl.viewangles[PITCH] > 80.0)
-		cl.viewangles[PITCH] = 80.0;
-	if (cl.viewangles[PITCH] < -70.0)
-		cl.viewangles[PITCH] = -70.0;
+	if (cl.viewangles[PITCH] > 90.0)
+		cl.viewangles[PITCH] = 90.0;
+	if (cl.viewangles[PITCH] < -90.0)
+		cl.viewangles[PITCH] = -90.0;
 }
