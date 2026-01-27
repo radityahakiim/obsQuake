@@ -62,7 +62,11 @@ extern void (*vid_menukeyfn)(int key);
 void	VID_SetPalette (unsigned char *palette);
 // called at startup and after any gamma correction
 
+#ifdef GLQUAKE
+void	VID_ShiftPalette();
+#else
 void	VID_ShiftPalette (unsigned char *palette);
+#endif
 // called for bonus and pain flashes, and for underwater color changes
 
 void	VID_Init (unsigned char *palette);

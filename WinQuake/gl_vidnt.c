@@ -722,7 +722,7 @@ void	VID_SetPalette(unsigned char* palette)
 }
 
 
-void	VID_ShiftPalette(unsigned char* palette)
+void	VID_ShiftPalette()
 {
 	extern	byte ramps[3][256];
 
