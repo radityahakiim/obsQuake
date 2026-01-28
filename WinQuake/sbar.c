@@ -1337,7 +1337,7 @@ void Sbar_FinaleOverlay (void)
 
 	// center the finale graphics
 	x = (vid.width - pic->width) / 2;
-	y = (vid.height - pic->height) / 2;
+	y = (vid.height - pic->height) / 2 - 32;
 	if (x < 0) x = 0;
 	if (y < 0) y = 0;
 

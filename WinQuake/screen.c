@@ -129,6 +129,7 @@ void SCR_DrawCenterString (void)
 	int		j;
 	int		x, y;
 	int		remaining;
+	int		total_height; // added for vertical centering
 
 // the finale prints the characters one at a time
 	if (cl.intermission)
@@ -139,10 +140,45 @@ void SCR_DrawCenterString (void)
 	scr_erase_center = 0;
 	start = scr_centerstring;
 
-	if (scr_center_lines <= 4)
-		y = vid.height*0.35;
-	else
-		y = 48;
+	// calculate total height of the text block (lines * 8px per line)
+	total_height = scr_center_lines * 8;
+
+	// center vertically: start y at (screen height - text height) / 2
+	y = (vid.height - total_height) / 2;
+	if (y < 0)
+		y = 0;
+
+	// place text below finale.lmp
+	if (cl.intermission) {
+		qpic_t* pic = Draw_CachePic("gfx/finale.lmp");
+		if (pic) {
+			// calculate where the bottom of the centered graphic is
+			int graphic_y = (vid.height - pic->height) / 2 - 32;
+			int graphic_bottom = graphic_y + pic->height;
+
+			// start text below the graphic + margin
+			y = graphic_bottom + 8;
+
+			if (y + total_height > vid.height)
+				y = vid.height - total_height;
+		}
+		else {
+			y = (vid.height - total_height) / 2;
+			if (y < 0) y = 0;
+		}
+	}
+	else {
+		// non finale text prints
+		if (scr_center_lines < 4)
+			y = vid.height * 0.425;
+		else
+			y = 48;
+
+		// clamp
+		if (y + total_height > vid.height)
+			y = vid.height - total_height;
+		if (y < 0) y = 0;
+	}
 
 	do	
 	{

@@ -157,15 +157,16 @@ void SCR_CenterPrint (char *str)
 }
 
 
-void SCR_DrawCenterString (void)
+void SCR_DrawCenterString(void)
 {
-	char	*start;
+	char* start;
 	int		l;
 	int		j;
 	int		x, y;
 	int		remaining;
+	int		total_height; // added for vertical centering
 
-// the finale prints the characters one at a time
+	// the finale prints the characters one at a time
 	if (cl.intermission)
 		remaining = scr_printspeed.value * (cl.time - scr_centertime_start);
 	else
@@ -174,25 +175,60 @@ void SCR_DrawCenterString (void)
 	scr_erase_center = 0;
 	start = scr_centerstring;
 
-	if (scr_center_lines <= 4)
-		y = vid.height*0.35;
-	else
-		y = 48;
+	// calculate total height of the text block (lines * 8px per line)
+	total_height = scr_center_lines * 8;
 
-	do	
+	// center vertically: start y at (screen height - text height) / 2
+	y = (vid.height - total_height) / 2;
+	if (y < 0)
+		y = 0;
+
+	// place text below finale.lmp
+	if (cl.intermission) {
+		qpic_t* pic = Draw_CachePic("gfx/finale.lmp");
+		if (pic) {
+			// calculate where the bottom of the centered graphic is
+			int graphic_y = (vid.height - pic->height) / 2 - 32;
+			int graphic_bottom = graphic_y + pic->height;
+
+			// start text below the graphic + margin
+			y = graphic_bottom + 8;
+
+			if (y + total_height > vid.height)
+				y = vid.height - total_height;
+		}
+		else {
+			y = (vid.height - total_height) / 2;
+			if (y < 0) y = 0;
+		}
+	}
+	else {
+		// non finale text prints
+		if (scr_center_lines < 4)
+			y = vid.height * 0.35;
+		else
+			y = 48;
+
+		// clamp
+		if (y + total_height > vid.height)
+			y = vid.height - total_height;
+		if (y < 0) y = 0;
+	}
+
+	do
 	{
-	// scan the width of the line
-		for (l=0 ; l<40 ; l++)
+		// scan the width of the line
+		for (l = 0; l < 40; l++)
 			if (start[l] == '\n' || !start[l])
 				break;
-		x = (vid.width - l*8)/2;
-		for (j=0 ; j<l ; j++, x+=8)
+		x = (vid.width - l * 8) / 2;
+		for (j = 0; j < l; j++, x += 8)
 		{
-			Draw_Character (x, y, start[j]);	
+			Draw_Character(x, y, start[j]);
 			if (!remaining--)
 				return;
 		}
-			
+
 		y += 8;
 
 		while (*start && *start != '\n')
