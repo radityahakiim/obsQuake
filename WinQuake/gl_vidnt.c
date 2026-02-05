@@ -724,22 +724,15 @@ void	VID_SetPalette(unsigned char* palette)
 
 void	VID_ShiftPalette()
 {
-	extern	byte ramps[3][256];
-
-	Uint16 red[256], green[256], blue[256];
-	int i;
-
 	if (!window) return;
+	float brightness = 1.0f / v_gamma.value;
+	
+	// clamp brightness to reasonable range
+	if (brightness < 0.5f) brightness = 0.5f;
+	if (brightness > 2.0f) brightness = 2.0f;
 
-	for (i = 0; i < 256; i++) {
-		red[i]   = (Uint16)ramps[0][i] * 257;
-		green[i] = (Uint16)ramps[1][i] * 257;
-		blue[i]  = (Uint16)ramps[2][i] * 257;
-	}
-
-	SDL_SetWindowGammaRamp(window, red, green, blue);
+	SDL_SetWindowBrightness(window, brightness);
 }
-
 
 void VID_SetDefaultMode(void)
 {
@@ -764,7 +757,7 @@ void	VID_Shutdown(void)
 		SDL_GL_DeleteContext(glContext);
 		glContext = NULL;
 	}
-
+	
 	if (window)
 	{
 		SDL_DestroyWindow(window);
