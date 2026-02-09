@@ -147,8 +147,7 @@ static int prev_width = 0, prev_height = 0;
 static int prev_refresh = 60;
 static int prev_vsync = 0;
 static int prev_fullscreen = 2; // 2 = exclusive fullscreen
-
-//====================================
+//========================================================================
 
 cvar_t		vid_mode = { "vid_mode","0", false };
 // Note that 0 is MODE_WINDOWED
@@ -645,8 +644,87 @@ void GL_BeginRendering(int* x, int* y, int* width, int* height)
 
 void GL_EndRendering(void)
 {
-	 if (!scr_skipupdate || block_drawing)
-	SDL_GL_SwapWindow(window);
+    if (!scr_skipupdate || block_drawing)
+    {
+        // apply brightness adjustment using a blended fullscreen quad
+        // v_gamma > 1 = brighter, v_gamma < 1 = darker
+
+        float gamma = v_gamma.value;
+        if (gamma != 1.0f)
+        {
+            int drawable_w, drawable_h;
+            SDL_GL_GetDrawableSize(window, &drawable_w, &drawable_h);
+
+            // setup 2D mode
+            glViewport(0, 0, drawable_w, drawable_h);
+            glMatrixMode(GL_PROJECTION);
+            glPushMatrix();
+            glLoadIdentity();
+            glOrtho(0, drawable_w, drawable_h, 0, -1, 1);
+            glMatrixMode(GL_MODELVIEW);
+            glPushMatrix();
+            glLoadIdentity();
+
+            glDisable(GL_TEXTURE_2D);
+            glDisable(GL_DEPTH_TEST);
+            glDisable(GL_CULL_FACE);
+            glDisable(GL_ALPHA_TEST);
+            glEnable(GL_BLEND);
+
+            if (gamma < 1.0f)
+            {
+                // brighten: additive blend with white (lower gamma = brighter)
+				float factor = 1.0f / gamma;
+				float color_boost = factor - 1.0f;
+				float white_boost = 0.08f * (factor - 1.0f);
+
+				glBlendFunc(GL_DST_COLOR, GL_ONE);
+				glColor4f(color_boost, color_boost, color_boost, 1.0f);
+				glBegin(GL_QUADS);
+				glVertex2f(0, 0);
+				glVertex2f(drawable_w, 0);
+				glVertex2f(drawable_w, drawable_h);
+				glVertex2f(0, drawable_h);
+				glEnd();
+
+				glBlendFunc(GL_ONE, GL_ONE);
+				glColor4f(white_boost, white_boost, white_boost, 1.0f);
+				glBegin(GL_QUADS);
+				glVertex2f(0, 0);
+				glVertex2f(drawable_w, 0);
+				glVertex2f(drawable_w, drawable_h);
+				glVertex2f(0, drawable_h);
+				glEnd();
+            }
+            else
+            {
+                // darken: multiply blend with gray (higher gamma = darker)
+                float darkness = 1.0f / gamma; // gamma 2.0 = multiply by 0.5
+                glBlendFunc(GL_DST_COLOR, GL_ZERO);
+                glColor4f(darkness, darkness, darkness, 1.0f);
+				glBegin(GL_QUADS);
+				glVertex2f(0, 0);
+				glVertex2f(drawable_w, 0);
+				glVertex2f(drawable_w, drawable_h);
+				glVertex2f(0, drawable_h);
+				glEnd();
+            }
+
+            // restore state
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+            glEnable(GL_TEXTURE_2D);
+            glEnable(GL_DEPTH_TEST);
+            glEnable(GL_CULL_FACE);
+            glEnable(GL_ALPHA_TEST);
+
+            glMatrixMode(GL_PROJECTION);
+            glPopMatrix();
+            glMatrixMode(GL_MODELVIEW);
+            glPopMatrix();
+        }
+
+        SDL_GL_SwapWindow(window);
+    }
 
 	if (key_dest != key_game) {
 		if (mouseactive) {
@@ -724,14 +802,6 @@ void	VID_SetPalette(unsigned char* palette)
 
 void	VID_ShiftPalette()
 {
-	if (!window) return;
-	float brightness = 1.0f / v_gamma.value;
-	
-	// clamp brightness to reasonable range
-	if (brightness < 0.5f) brightness = 0.5f;
-	if (brightness > 2.0f) brightness = 2.0f;
-
-	SDL_SetWindowBrightness(window, brightness);
 }
 
 void VID_SetDefaultMode(void)
@@ -1355,14 +1425,10 @@ void VID_Init8bitPalette()
 static void Check_Gamma(unsigned char* pal)
 {
 	int i;
-	float f, inf;
 
 	// command-line override
 	if ((i = COM_CheckParm("-gamma")) != 0) {
 		vid_gamma = Q_atof(com_argv[i + 1]);
-	}
-	else {
-		vid_gamma = 1.0f;
 	}
 }
 
