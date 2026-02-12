@@ -150,8 +150,25 @@ LONG WINAPI MainWndProc (HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 void AppActivate(const SDL_Event* event);
 void VID_UpdateWindowStatus(void);
 SDL_Window* window = NULL;
-SDL_Surface* screen_surface = NULL; // window surface
+// SDL_Surface* screen_surface = NULL; // window surface
 SDL_Surface* quake_surface = NULL; // 8-bit quake render surface
+
+SDL_Renderer* renderer = NULL;
+SDL_Texture* render_texture = NULL;
+
+const float RATIO_STD = 4.0f / 3.0f;
+const float RATIO_WS = 16.0f / 9.0f;
+const float RATIO_WS_WXGA = 16.0f / 10.0f;
+const float TOLERANCE = 0.02f;
+
+static const int INTERNAL_WIDTH_STD = 1024;
+static const int INTERNAL_HEIGHT_STD = 768;
+
+static const int INTERNAL_WIDTH_WS = 1280;
+static const int INTERNAL_HEIGHT_WS = 720;
+
+static const int INTERNAL_WIDTH_WS_WXGA = 1280;
+static const int INTERNAL_HEIGHT_WS_WXGA = 800;
 
 void HandleEvents()
 {
@@ -161,7 +178,7 @@ void HandleEvents()
 	{
 		switch (event.type) {
 		case SDL_QUIT:
-			// clode the window
+			// close the window
 			Sys_Quit();
 			break;
 		case SDL_WINDOWEVENT:
@@ -179,69 +196,6 @@ void HandleEvents()
 				if (event.window.event == SDL_WINDOWEVENT_RESTORED)
 					VID_UpdateWindowStatus();
 				break;
-			case SDL_WINDOWEVENT_RESIZED:
-			case SDL_WINDOWEVENT_SIZE_CHANGED:
-			{
-				int new_w = event.window.data1;
-				int new_h = event.window.data2;
-
-				// update cached window size
-				window_width = new_w;
-				window_height = new_h;
-				VID_UpdateWindowStatus();
-
-				if (modestate == MS_WINDOWED && window)
-				{
-					// update the window surface reference
-					SDL_Surface* new_screen = SDL_GetWindowSurface(window);
-					if (new_screen)
-						screen_surface = new_screen;
-
-					// recreate quake_surface at the new size
-					if (quake_surface)
-					{
-						SDL_FreeSurface(quake_surface);
-						quake_surface = NULL;
-					}
-
-					quake_surface = SDL_CreateRGBSurface(0, new_w, new_h, 8, 0, 0, 0, 0);
-					if (!quake_surface)
-					{
-						Con_SafePrintf("SDL_CreateRGBSurface failed on resize: %s\n", SDL_GetError());
-						break;
-					}
-
-					// point vid at the new surface and update geometry
-					vid.buffer = vid.conbuffer = vid.direct = (byte*)quake_surface->pixels;
-					vid.rowbytes = vid.conrowbytes = quake_surface->pitch;
-					vid.numpages = 1;
-					vid.maxwarpwidth = WARP_WIDTH;
-					vid.maxwarpheight = WARP_HEIGHT;
-					vid.height = vid.conheight = new_h;
-					vid.width = vid.conwidth = new_w;
-					vid.aspect = ((float)vid.height / (float)vid.width) * (320.0 / 240.0);
-
-					if (!VID_AllocBuffers(vid.width, vid.height))
-					{
-						Con_SafePrintf("Not enough memory for resized video buffers\n");
-					}
-					else
-					{
-						D_InitCaches(vid_surfcache, vid_surfcachesize);
-					}
-
-					// reapply palette so the new 8-bit surface has correct colors
-					VID_SetPalette(vid_curpal);
-
-					vid.recalc_refdef = 1; // force recalc so view/3D viewport matches
-					VID_UpdateWindowStatus();
-
-					// store to cvar for later use
-					Cvar_SetValue("vid_window_x", (float)window_x);
-					Cvar_SetValue("vid_window_y", (float)window_y);
-				}
-			}
-			break;
 			}
 			break;
 		case SDL_KEYDOWN:
@@ -554,22 +508,65 @@ void VID_InitModes(void) {
 	windowed_default = vid_default;
 }
 
-qboolean VID_SetWindowedMode (int modenum)
+qboolean VID_SetWindowedMode(int modenum)
 {
-	qboolean stretched = modelist[modenum].stretched;
+	int targ_winternal;
+	int targ_hinternal;
+	float ratio;
 
-	DDActive = 0;
-
-	if (quake_surface) SDL_FreeSurface(quake_surface);
-	if (screen_surface) SDL_FreeSurface(screen_surface);
-	if (window) SDL_DestroyWindow(window);
-	window = NULL;
+	if (render_texture) { SDL_DestroyTexture(render_texture); render_texture = NULL; }
+	if (renderer) { SDL_DestroyRenderer(renderer); renderer = NULL; }
+	if (quake_surface) { SDL_FreeSurface(quake_surface); quake_surface = NULL; }
+	if (window) { SDL_DestroyWindow(window); window = NULL; }
 
 	Uint32 flags = SDL_WINDOW_SHOWN;
 
 	// center automatically
 	int posx = SDL_WINDOWPOS_CENTERED;
 	int posy = SDL_WINDOWPOS_CENTERED;
+
+	// determine aspect ratio for widescreen
+	ratio = (float)modelist[modenum].width / modelist[modenum].height;
+
+	qboolean is_std = (fabs(ratio - RATIO_STD) < TOLERANCE);
+	qboolean is_ws = (fabs(ratio - RATIO_WS) < TOLERANCE);
+	qboolean is_ws_wxga = (fabs(ratio - RATIO_WS_WXGA) < TOLERANCE);
+	if (is_ws)
+	{
+		if ((modelist[modenum].width >= INTERNAL_WIDTH_WS) && (modelist[modenum].height >= INTERNAL_HEIGHT_WS)) {
+			targ_winternal = INTERNAL_WIDTH_WS;
+			targ_hinternal = INTERNAL_HEIGHT_WS;
+		}
+		else {
+			targ_winternal = modelist[modenum].width;
+			targ_hinternal = modelist[modenum].height;
+		}
+	}
+	else if (is_std) {
+		if ((modelist[modenum].width >= INTERNAL_WIDTH_STD) && (modelist[modenum].height >= INTERNAL_HEIGHT_STD)) {
+			targ_winternal = INTERNAL_WIDTH_STD;
+			targ_hinternal = INTERNAL_HEIGHT_STD;
+		}
+		else {
+			targ_winternal = modelist[modenum].width;
+			targ_hinternal = modelist[modenum].height;
+		}
+	}
+	else if (is_ws_wxga) {
+		if ((modelist[modenum].width >= INTERNAL_WIDTH_WS_WXGA) && (modelist[modenum].height >= INTERNAL_HEIGHT_WS_WXGA)) {
+			targ_winternal = INTERNAL_WIDTH_WS_WXGA;
+			targ_hinternal = INTERNAL_HEIGHT_WS_WXGA;
+		}
+		else {
+			targ_winternal = modelist[modenum].width;
+			targ_hinternal = modelist[modenum].height;
+		}
+	}
+	else {
+		targ_winternal = modelist[modenum].width;
+		targ_hinternal = modelist[modenum].height;
+	}
+
 
 	window = SDL_CreateWindow("WinQuake",
 		posx,
@@ -582,12 +579,17 @@ qboolean VID_SetWindowedMode (int modenum)
 		Sys_Error("SDL_CreateWindow failed: %s", SDL_GetError());
 	}
 
-	screen_surface = SDL_GetWindowSurface(window);
-	if (!screen_surface) {
-		Sys_Error("SDL_GetWindowSurface failed: %s", SDL_GetError());
-	}
+	renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+	if (!renderer) renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);
 
-	quake_surface = SDL_CreateRGBSurface(0, modelist[modenum].width, modelist[modenum].height, 8, 0, 0, 0, 0);
+	SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");
+	//SDL_RenderSetLogicalSize(renderer, targ_winternal, targ_hinternal);
+
+	render_texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888,
+		SDL_TEXTUREACCESS_STREAMING, targ_winternal, targ_hinternal);
+	 if (!render_texture) Sys_Error("SDL_CreateTexture failed: %s", SDL_GetError());
+
+	quake_surface = SDL_CreateRGBSurface(0, targ_winternal, targ_hinternal, 8, 0, 0, 0, 0);
 	if (!quake_surface) {
 		Sys_Error("SDL_CreateRGBSurface failed: %s", SDL_GetError());
 	}
@@ -597,20 +599,15 @@ qboolean VID_SetWindowedMode (int modenum)
 	vid.numpages = 1;
 	vid.maxwarpwidth = WARP_WIDTH;
 	vid.maxwarpheight = WARP_HEIGHT;
-	vid.height = vid.conheight = modelist[modenum].height;
-	vid.width = vid.conwidth = modelist[modenum].width;
-	vid.aspect = ((float)vid.height / (float)vid.width) * (320.0 / 240.0);
+	vid.height = vid.conheight = targ_hinternal;
+	vid.width = vid.conwidth = targ_winternal;
+	vid.aspect = ((float)targ_hinternal / (float)targ_winternal) * (320.0 / 240.0);
 
-	vid_stretched = stretched;
-
+	vid_stretched = modelist[modenum].stretched;
 	modestate = MS_WINDOWED;
 	vid_fulldib_on_focus_mode = 0;
 
 	VID_UpdateWindowStatus();
-
-	// store to cvar for later use
-	Cvar_SetValue("vid_window_x", (float)window_x);
-	Cvar_SetValue("vid_window_y", (float)window_y);
 
 	if (_windowed_mouse.value) {
 		IN_ActivateMouse();
@@ -626,16 +623,59 @@ qboolean VID_SetWindowedMode (int modenum)
 
 qboolean VID_SetFullscreenMode (int modenum)
 {
-	qboolean stretched = modelist[modenum].stretched;
+	int targ_winternal;
+	int targ_hinternal;
+	float ratio;
 
-	DDActive = 1;
-
-	if (quake_surface) SDL_FreeSurface(quake_surface);
-	if (screen_surface) SDL_FreeSurface(screen_surface);
-	if (window) SDL_DestroyWindow(window);
-	window = NULL;
+	if (render_texture) { SDL_DestroyTexture(render_texture); render_texture = NULL; }
+	if (renderer) { SDL_DestroyRenderer(renderer); renderer = NULL; }
+	if (quake_surface) { SDL_FreeSurface(quake_surface); quake_surface = NULL; }
+	if (window) { SDL_DestroyWindow(window); window = NULL; }
 
 	Uint32 flags = SDL_WINDOW_FULLSCREEN | SDL_WINDOW_SHOWN;
+
+	// determine aspect ratio for widescreen
+	ratio = (float)modelist[modenum].width / modelist[modenum].height;
+
+	qboolean is_std = (fabs(ratio - RATIO_STD) < TOLERANCE);
+	qboolean is_ws = (fabs(ratio - RATIO_WS) < TOLERANCE);
+	qboolean is_ws_wxga = (fabs(ratio - RATIO_WS_WXGA) < TOLERANCE);
+	if (is_ws)
+	{
+		if ((modelist[modenum].width >= INTERNAL_WIDTH_WS) && (modelist[modenum].height >= INTERNAL_HEIGHT_WS)) {
+			targ_winternal = INTERNAL_WIDTH_WS;
+			targ_hinternal = INTERNAL_HEIGHT_WS;
+		}
+		else {
+			targ_winternal = modelist[modenum].width;
+			targ_hinternal = modelist[modenum].height;
+		}
+	}
+	else if (is_std) {
+		if ((modelist[modenum].width >= INTERNAL_WIDTH_STD) && (modelist[modenum].height >= INTERNAL_HEIGHT_STD)) {
+			targ_winternal = INTERNAL_WIDTH_STD;
+			targ_hinternal = INTERNAL_HEIGHT_STD;
+		}
+		else {
+			targ_winternal = modelist[modenum].width;
+			targ_hinternal = modelist[modenum].height;
+		}
+	}
+	else if (is_ws_wxga) {
+		if ((modelist[modenum].width >= INTERNAL_WIDTH_WS_WXGA) && (modelist[modenum].height >= INTERNAL_HEIGHT_WS_WXGA)) {
+			targ_winternal = INTERNAL_WIDTH_WS_WXGA;
+			targ_hinternal = INTERNAL_HEIGHT_WS_WXGA;
+		}
+		else {
+			targ_winternal = modelist[modenum].width;
+			targ_hinternal = modelist[modenum].height;
+		}
+	}
+	else {
+		targ_winternal = modelist[modenum].width;
+		targ_hinternal = modelist[modenum].height;
+	}
+
 	window = SDL_CreateWindow("WinQuake",
 		SDL_WINDOWPOS_UNDEFINED,
 		SDL_WINDOWPOS_UNDEFINED,
@@ -647,12 +687,23 @@ qboolean VID_SetFullscreenMode (int modenum)
 		Sys_Error("SDL_CreateWindow failed: %s", SDL_GetError());
 	}
 
-	screen_surface = SDL_GetWindowSurface(window);
-	if (!screen_surface) {
-		Sys_Error("SDL_GetWindowSurface failed: %s", SDL_GetError());
-	}
+	SDL_DisplayMode dm;
+	SDL_GetWindowDisplayMode(window, &dm);
+	dm.w = modelist[modenum].width;
+	dm.h = modelist[modenum].height;
+	SDL_SetWindowDisplayMode(window, &dm);
 
-	quake_surface = SDL_CreateRGBSurface(0, modelist[modenum].width, modelist[modenum].height, 8, 0, 0, 0, 0);
+	renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+	if (!renderer) renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);
+
+	SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");
+	//SDL_RenderSetLogicalSize(renderer, targ_winternal, targ_hinternal);
+
+	render_texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888,
+		SDL_TEXTUREACCESS_STREAMING, targ_winternal, targ_hinternal);
+	if (!render_texture) Sys_Error("SDL_CreateTexture failed: %s", SDL_GetError());
+
+	quake_surface = SDL_CreateRGBSurface(0, targ_winternal, targ_hinternal, 8, 0, 0, 0, 0);
 	if (!quake_surface) {
 		Sys_Error("SDL_CreateRGBSurface failed: %s", SDL_GetError());
 	}
@@ -662,14 +713,13 @@ qboolean VID_SetFullscreenMode (int modenum)
 	vid.numpages = 1;
 	vid.maxwarpwidth = WARP_WIDTH;
 	vid.maxwarpheight = WARP_HEIGHT;
-	vid.height = vid.conheight = modelist[modenum].height;
-	vid.width = vid.conwidth = modelist[modenum].width;
-	vid.aspect = ((float)vid.height / (float)vid.width) * (320.0 / 240.0);
+	vid.height = vid.conheight = targ_hinternal;
+	vid.width = vid.conwidth = targ_winternal;
+	vid.aspect = ((float)targ_hinternal / (float)targ_winternal) * (320.0 / 240.0);
 
-	vid_stretched = stretched;
+	vid_stretched = modelist[modenum].stretched;
 
 	modestate = MS_FULLSCREEN;
-	vid_fulldib_on_focus_mode = 0;
 
 	VID_UpdateWindowStatus();
 
@@ -1256,6 +1306,9 @@ void	VID_Init (unsigned char *palette)
 		startwindowed = 1;
 		vid_default = windowed_default;
 	}
+	else {
+		vid_default = (int)_vid_default_mode_win.value;
+	}
 
 	vid_initialized = true;
 
@@ -1278,7 +1331,7 @@ void	VID_Shutdown (void)
 	if (vid_initialized)
 	{
 		if (quake_surface) SDL_FreeSurface(quake_surface);
-		if (screen_surface) SDL_FreeSurface(screen_surface);
+		// if (screen_surface) SDL_FreeSurface(screen_surface);
 		if (window) SDL_DestroyWindow(window);
 
 		SDL_QuitSubSystem(SDL_INIT_VIDEO);
@@ -1290,19 +1343,82 @@ void	VID_Shutdown (void)
 
 void	VID_Update(vrect_t* rects)
 {
-	vrect_t	rect;
+	if (!renderer || !render_texture || !quake_surface || !window)
+		return;
 
-	if (!vid_palettized && palette_changed)
+	int targ_winternal;
+	int targ_hinternal;
+	float ratio;
+
+	// determine aspect ratio for widescreen
+	ratio = (float)modelist[vid_modenum].width / modelist[vid_modenum].height;
+
+	qboolean is_std = (fabs(ratio - RATIO_STD) < TOLERANCE);
+	qboolean is_ws = (fabs(ratio - RATIO_WS) < TOLERANCE);
+	qboolean is_ws_wxga = (fabs(ratio - RATIO_WS_WXGA) < TOLERANCE);
+	if (is_ws)
 	{
-		palette_changed = false;
-		rect.x = 0;
-		rect.y = 0;
-		rect.width = vid.width;
-		rect.height = vid.height;
-		rect.pnext = NULL;
-		rects = &rect;
+		if ((modelist[vid_modenum].width >= INTERNAL_WIDTH_WS) && (modelist[vid_modenum].height >= INTERNAL_HEIGHT_WS)) {
+			targ_winternal = INTERNAL_WIDTH_WS;
+			targ_hinternal = INTERNAL_HEIGHT_WS;
+		}
+		else {
+			targ_winternal = modelist[vid_modenum].width;
+			targ_hinternal = modelist[vid_modenum].height;
+		}
+	}
+	else if (is_std) {
+		if ((modelist[vid_modenum].width >= INTERNAL_WIDTH_STD) && (modelist[vid_modenum].height >= INTERNAL_HEIGHT_STD)) {
+			targ_winternal = INTERNAL_WIDTH_STD;
+			targ_hinternal = INTERNAL_HEIGHT_STD;
+		}
+		else {
+			targ_winternal = modelist[vid_modenum].width;
+			targ_hinternal = modelist[vid_modenum].height;
+		}
+	}
+	else if (is_ws_wxga) {
+		if ((modelist[vid_modenum].width >= INTERNAL_WIDTH_WS_WXGA) && (modelist[vid_modenum].height >= INTERNAL_HEIGHT_WS_WXGA)) {
+			targ_winternal = INTERNAL_WIDTH_WS_WXGA;
+			targ_hinternal = INTERNAL_HEIGHT_WS_WXGA;
+		}
+		else {
+			targ_winternal = modelist[vid_modenum].width;
+			targ_hinternal = modelist[vid_modenum].height;
+		}
+	}
+	else {
+		targ_winternal = modelist[vid_modenum].width;
+		targ_hinternal = modelist[vid_modenum].height;
 	}
 
+	// convert 8-bit palette surface to RGBA8888 texture
+	void* pixels;
+	int pitch;
+	if (SDL_LockTexture(render_texture, NULL, &pixels, &pitch) == 0) {
+		SDL_Palette* pal = quake_surface->format->palette;
+		byte* src = (byte*)quake_surface->pixels;
+		uint32_t* dst = (uint32_t*)pixels;
+		int src_pitch = quake_surface->pitch;
+		int dst_pitch = pitch / 4;
+
+		for (int y = 0; y < targ_hinternal; y++) {
+			for (int x = 0; x < targ_winternal; x++) {
+				byte idx = src[x];
+				SDL_Color c = pal->colors[idx];
+				dst[x] = (c.r << 24) | (c.g << 16) | (c.b << 8) | 0xFF;
+			}
+			src += src_pitch;
+			dst += dst_pitch;
+		}
+		SDL_UnlockTexture(render_texture);
+	}
+
+	// stretch to fill the entire window
+	SDL_Rect dst_rect = { 0,0,window_width, window_height };
+	SDL_RenderClear(renderer);
+	SDL_RenderCopy(renderer, render_texture, NULL, &dst_rect);
+	SDL_RenderPresent(renderer);
 	if (firstupdate)
 	{
 		firstupdate = 0;
@@ -1310,12 +1426,6 @@ void	VID_Update(vrect_t* rects)
 		{
 			Cvar_SetValue("vid_mode", _vid_default_mode_win.value);
 		}
-	}
-
-	// blit quake surface to window
-	if (quake_surface && screen_surface && window) {
-		SDL_BlitSurface(quake_surface, NULL, screen_surface, NULL);
-		SDL_UpdateWindowSurface(window);
 	}
 
 	if (vid_testingmode)
@@ -1515,9 +1625,11 @@ void AppActivate(const SDL_Event* event)
 
 		if (window) {
 			SDL_Surface* new_screen = SDL_GetWindowSurface(window);
+			/*
 			if (new_screen) {
 				screen_surface = new_screen;
 			}
+			*/
 		}
 
 		S_UnblockSound();
@@ -1543,10 +1655,10 @@ void AppActivate(const SDL_Event* event)
 		VID_HandlePause(false);
 
 		// reapply palette and force surface update to avoid permanent freeze
-		if (quake_surface && screen_surface) {
+		if (quake_surface /* && screen_surface*/) {
 			VID_SetPalette(vid_curpal);
 			VID_UpdateWindowStatus();
-			SDL_BlitSurface(quake_surface, NULL, screen_surface, NULL);
+			//SDL_BlitSurface(quake_surface, NULL, screen_surface, NULL);
 			SDL_UpdateWindowSurface(window);
 			SDL_PumpEvents();
 		}
