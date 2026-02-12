@@ -575,7 +575,7 @@ void GL_Init(void)
 	CheckTextureExtensions();
 	CheckMultiTextureExtensions();
 
-	glClearColor(1, 0, 0, 0);
+	glClearColor(0, 0, 0, 1);
 	glCullFace(GL_FRONT);
 	glEnable(GL_TEXTURE_2D);
 
@@ -633,6 +633,7 @@ void GL_BeginRendering(int* x, int* y, int* width, int* height)
 	}
 
 	glViewport(vp_x, vp_y, vp_w, vp_h);
+	glClear(GL_COLOR_BUFFER_BIT);
 
 	*x = vp_x;
 	*y = vp_y;
