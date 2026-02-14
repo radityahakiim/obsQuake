@@ -146,7 +146,6 @@ static byte	backingbuf[48*24];
 void VID_MenuDraw (void);
 void VID_MenuKey (int key);
 
-LONG WINAPI MainWndProc (HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 void AppActivate(const SDL_Event* event);
 void VID_UpdateWindowStatus(void);
 SDL_Window* window = NULL;
@@ -1072,6 +1071,10 @@ void	VID_SetPalette (unsigned char *palette)
 			colors[i].r = palette[i * 3];
 			colors[i].g = palette[i * 3 + 1];
 			colors[i].b = palette[i * 3 + 2];
+
+			// precompute 
+			d_8to24table[i] = (colors[i].r << 24) | (colors[i].g << 16) |
+				(colors[i].b << 8) | 0xFF;
 		}
 
 		SDL_SetPaletteColors(quake_surface->format->palette, colors, 0, 256);
@@ -1403,10 +1406,27 @@ void	VID_Update(vrect_t* rects)
 		int dst_pitch = pitch / 4;
 
 		for (int y = 0; y < targ_hinternal; y++) {
-			for (int x = 0; x < targ_winternal; x++) {
-				byte idx = src[x];
-				SDL_Color c = pal->colors[idx];
-				dst[x] = (c.r << 24) | (c.g << 16) | (c.b << 8) | 0xFF;
+				byte* s = src;
+				uint32_t* d = dst;
+				int count = targ_winternal;
+
+				if (count > 0)
+				{
+					int n = (count + 7) / 8; 
+
+					switch (count % 8)
+					{
+					case 0: do {
+						*d++ = d_8to24table[*s++];
+					case 7:      *d++ = d_8to24table[*s++];
+					case 6:      *d++ = d_8to24table[*s++];
+					case 5:      *d++ = d_8to24table[*s++];
+					case 4:      *d++ = d_8to24table[*s++];
+					case 3:      *d++ = d_8to24table[*s++];
+					case 2:      *d++ = d_8to24table[*s++];
+					case 1:      *d++ = d_8to24table[*s++];
+					} while (--n > 0);
+					}
 			}
 			src += src_pitch;
 			dst += dst_pitch;
