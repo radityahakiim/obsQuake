@@ -97,16 +97,23 @@ D_DrawTurbulent8Span
 */
 void D_DrawTurbulent8Span (void)
 {
-	int		sturb, tturb;
-
+	int				count	= r_turb_spancount;
+	unsigned char*	pdest	= r_turb_pdest;
+	fixed16_t		s		= r_turb_s;
+	fixed16_t		t		= r_turb_t;
+	int				sstep	= r_turb_sstep;
+	int				tstep	= r_turb_tstep;
+	int*			turb	= r_turb_turb;
+	unsigned char*	pbase	= r_turb_pbase;
 	do
 	{
-		sturb = ((r_turb_s + r_turb_turb[(r_turb_t>>16)&(CYCLE-1)])>>16)&63;
-		tturb = ((r_turb_t + r_turb_turb[(r_turb_s>>16)&(CYCLE-1)])>>16)&63;
-		*r_turb_pdest++ = *(r_turb_pbase + (tturb<<6) + sturb);
-		r_turb_s += r_turb_sstep;
-		r_turb_t += r_turb_tstep;
-	} while (--r_turb_spancount > 0);
+		int sturb = ((s + turb[(t>>16)&(CYCLE-1)])>>16)&63;
+		int tturb = ((t + turb[(s>>16)&(CYCLE-1)])>>16)&63;
+		*pdest++ = pbase[(tturb << 6) + sturb];
+		s += sstep;
+		t += tstep;
+	} while (--count > 0);
+	r_turb_pdest = pdest;
 }
 
 
@@ -389,6 +396,60 @@ void D_DrawSpans8 (espan_t *pspan)
 
 	} while ((pspan = pspan->pnext) != NULL);
 }
+
+
+/*
+=============
+D_DrawSpans8Trans
+=============
+*/
+
+void D_DrawSpans8Trans(espan_t* pspan)
+{
+	int				count, spancount;
+	unsigned char* pbase, * pdest;
+	fixed16_t		s, t, snext, tnext, sstep, tstep;
+	float			sdivz, tdivz, zi, z, du, dv, spancountminus1;
+	float			sdivz8stepu, tdivz8stepu, zi8stepu;
+
+	sstep = 0;	// keep compiler happy
+	tstep = 0;	// ditto
+
+	pbase = (unsigned char*)cacheblock;
+
+	sdivz8stepu = d_sdivzstepu * 8;
+	tdivz8stepu = d_tdivzstepu * 8;
+	zi8stepu = d_zistepu * 8;
+	do {
+		pdest = (unsigned char*)((byte*)d_viewbuffer +
+			(screenwidth * pspan->v) + pspan->u);
+
+		count = pspan->count;
+
+		// calculate the initial s/z, t/z, 1/z, s, and t and clamp
+		du = (float)pspan->u;
+		dv = (float)pspan->v;
+
+		sdivz = d_sdivzorigin + dv * d_sdivzstepv + du * d_sdivzstepu;
+		tdivz = d_tdivzorigin + dv * d_tdivzstepv + du * d_tdivzstepu;
+		zi = d_ziorigin + dv * d_zistepv + du * d_zistepu;
+		z = (float)0x10000 / zi;	// prescale to 16.16 fixed-point
+
+		s = (int)(sdivz * z) + sadjust;
+		if (s > bbextents)
+			s = bbextents;
+		else if (s < 0)
+			s = 0;
+
+		t = (int)(tdivz * z) + tadjust;
+		if (t > bbextentt)
+			t = bbextentt;
+		else if (t < 0)
+			t = 0;
+
+		do
+		{
+			// calculate s and t at the far end of the span
 			if (count >= 8)
 				spancount = 8;
 			else
@@ -398,8 +459,8 @@ void D_DrawSpans8 (espan_t *pspan)
 
 			if (count)
 			{
-			// calculate s/z, t/z, zi->fixed s and t at far end of span,
-			// calculate s and t steps across span by shifting
+				// calculate s/z, t/z, zi->fixed s and t at far end of span,
+				// calculate s and t steps across span by shifting
 				sdivz += sdivz8stepu;
 				tdivz += tdivz8stepu;
 				zi += zi8stepu;
@@ -410,8 +471,8 @@ void D_DrawSpans8 (espan_t *pspan)
 					snext = bbextents;
 				else if (snext < 8)
 					snext = 8;	// prevent round-off error on <0 steps from
-								//  from causing overstepping & running off the
-								//  edge of the texture
+				//  from causing overstepping & running off the
+				//  edge of the texture
 
 				tnext = (int)(tdivz * z) + tadjust;
 				if (tnext > bbextentt)
@@ -424,10 +485,10 @@ void D_DrawSpans8 (espan_t *pspan)
 			}
 			else
 			{
-			// calculate s/z, t/z, zi->fixed s and t at last pixel in span (so
-			// can't step off polygon), clamp, calculate s and t steps across
-			// span by division, biasing steps low so we don't run off the
-			// texture
+				// calculate s/z, t/z, zi->fixed s and t at last pixel in span (so
+				// can't step off polygon), clamp, calculate s and t steps across
+				// span by division, biasing steps low so we don't run off the
+				// texture
 				spancountminus1 = (float)(spancount - 1);
 				sdivz += d_sdivzstepu * spancountminus1;
 				tdivz += d_tdivzstepu * spancountminus1;
@@ -438,8 +499,8 @@ void D_DrawSpans8 (espan_t *pspan)
 					snext = bbextents;
 				else if (snext < 8)
 					snext = 8;	// prevent round-off error on <0 steps from
-								//  from causing overstepping & running off the
-								//  edge of the texture
+				//  from causing overstepping & running off the
+				//  edge of the texture
 
 				tnext = (int)(tdivz * z) + tadjust;
 				if (tnext > bbextentt)
@@ -454,16 +515,16 @@ void D_DrawSpans8 (espan_t *pspan)
 				}
 			}
 
-			do
-			{
-				*pdest++ = *(pbase + (s >> 16) + (t >> 16) * cachewidth);
+			do {
+				byte texel = *(pbase + (s >> 16) + (t >> 16) * cachewidth);
+				if (texel != 255)
+					*pdest = texel;
+				pdest++;
 				s += sstep;
 				t += tstep;
 			} while (--spancount > 0);
-
 			s = snext;
 			t = tnext;
-
 		} while (count > 0);
 
 	} while ((pspan = pspan->pnext) != NULL);
@@ -493,13 +554,11 @@ void D_DrawZSpans (espan_t *pspan)
 	do
 	{
 		pdest = d_pzbuffer + (d_zwidth * pspan->v) + pspan->u;
-
 		count = pspan->count;
 
 	// calculate the initial 1/z
 		du = (float)pspan->u;
 		dv = (float)pspan->v;
-
 		zi = d_ziorigin + dv*d_zistepv + du*d_zistepu;
 	// we count on FP exceptions being turned off to avoid range problems
 		izi = (int)(zi * 0x8000 * 0x10000);
@@ -561,6 +620,141 @@ void D_DrawZSpans (espan_t *pspan)
 
 		if (count & 1)
 			*pdest = (short)(izi >> 16);
+
+	} while ((pspan = pspan->pnext) != NULL);
+}
+
+/*
+=============
+D_DrawZSpansTrans
+=============
+*/
+void D_DrawZSpansTrans(espan_t* pspan)
+{
+	int				count, spancount;
+	unsigned char* pbase;
+	short* pz;  // z-buffer pointer (shorts)
+	fixed16_t		s, t, snext, tnext, sstep, tstep;
+	float			sdivz, tdivz, zi, z, du, dv, spancountminus1;
+	float			sdivz8stepu, tdivz8stepu, zi8stepu;
+	int				izi, izistep;
+
+	// keep compiler happy
+	sstep = 0;
+	tstep = 0;
+	izistep = (int)(d_zistepu * 0x8000 * 0x10000);
+
+	pbase = (unsigned char*)cacheblock;
+
+	sdivz8stepu = d_sdivzstepu * 8;
+	tdivz8stepu = d_tdivzstepu * 8;
+	zi8stepu = d_zistepu * 8;
+
+	do
+	{
+		pz = d_pzbuffer + (d_zwidth * pspan->v) + pspan->u;
+
+		count = pspan->count;
+
+		// calculate the initial s/z, t/z, 1/z, s, and t and clamp
+		du = (float)pspan->u;
+		dv = (float)pspan->v;
+
+		sdivz = d_sdivzorigin + dv * d_sdivzstepv + du * d_sdivzstepu;
+		tdivz = d_tdivzorigin + dv * d_tdivzstepv + du * d_tdivzstepu;
+		zi = d_ziorigin + dv * d_zistepv + du * d_zistepu;
+		z = (float)0x10000 / zi;	// prescale to 16.16 fixed-point (for s/t)
+
+		s = (int)(sdivz * z) + sadjust;
+		if (s > bbextents)
+			s = bbextents;
+		else if (s < 0)
+			s = 0;
+
+		t = (int)(tdivz * z) + tadjust;
+		if (t > bbextentt)
+			t = bbextentt;
+		else if (t < 0)
+			t = 0;
+
+		// Initial izi for Z
+		izi = (int)(zi * 0x8000 * 0x10000);
+
+		do
+		{
+			// calculate s and t at the far end of the span
+			if (count >= 8)
+				spancount = 8;
+			else
+				spancount = count;
+
+			count -= spancount;
+
+			if (count)
+			{
+				// calculate s/z, t/z, zi->fixed s and t at far end of span,
+				// calculate s and t steps across span by shifting
+				sdivz += sdivz8stepu;
+				tdivz += tdivz8stepu;
+				zi += zi8stepu;
+				z = (float)0x10000 / zi;	// prescale to 16.16 fixed-point
+
+				snext = (int)(sdivz * z) + sadjust;
+				if (snext > bbextents)
+					snext = bbextents;
+				else if (snext < 8)
+					snext = 8;
+
+				tnext = (int)(tdivz * z) + tadjust;
+				if (tnext > bbextentt)
+					tnext = bbextentt;
+				else if (tnext < 8)
+					tnext = 8;
+
+				sstep = (snext - s) >> 3;
+				tstep = (tnext - t) >> 3;
+			}
+			else
+			{
+				spancountminus1 = (float)(spancount - 1);
+				sdivz += d_sdivzstepu * spancountminus1;
+				tdivz += d_tdivzstepu * spancountminus1;
+				zi += d_zistepu * spancountminus1;
+				z = (float)0x10000 / zi;
+				snext = (int)(sdivz * z) + sadjust;
+				if (snext > bbextents)
+					snext = bbextents;
+				else if (snext < 8)
+					snext = 8;
+
+				tnext = (int)(tdivz * z) + tadjust;
+				if (tnext > bbextentt)
+					tnext = bbextentt;
+				else if (tnext < 8)
+					tnext = 8;
+
+				if (spancount > 1)
+				{
+					sstep = (snext - s) / (spancount - 1);
+					tstep = (tnext - t) / (spancount - 1);
+				}
+			}
+
+			do
+			{
+				byte texel = *(pbase + (s >> 16) + (t >> 16) * cachewidth);
+				if (texel != 255)
+					*pz = (short)(izi >> 16);
+				pz++;
+				izi += izistep;
+				s += sstep;
+				t += tstep;
+			} while (--spancount > 0);
+
+			s = snext;
+			t = tnext;
+
+		} while (count > 0);
 
 	} while ((pspan = pspan->pnext) != NULL);
 }
