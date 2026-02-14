@@ -256,16 +256,16 @@ void D_DrawSpans8 (espan_t *pspan)
 	unsigned char	*pbase, *pdest;
 	fixed16_t		s, t, snext, tnext, sstep, tstep;
 	float			sdivz, tdivz, zi, z, du, dv, spancountminus1;
-	float			sdivz8stepu, tdivz8stepu, zi8stepu;
+	float			sdivz16stepu, tdivz16stepu, zi16stepu;
 
 	sstep = 0;	// keep compiler happy
 	tstep = 0;	// ditto
 
 	pbase = (unsigned char *)cacheblock;
 
-	sdivz8stepu = d_sdivzstepu * 8;
-	tdivz8stepu = d_tdivzstepu * 8;
-	zi8stepu = d_zistepu * 8;
+	sdivz16stepu = d_sdivzstepu * 16;
+	tdivz16stepu = d_tdivzstepu * 16;
+	zi16stepu = d_zistepu * 16;
 
 	do
 	{
@@ -298,6 +298,97 @@ void D_DrawSpans8 (espan_t *pspan)
 		do
 		{
 		// calculate s and t at the far end of the span
+			if (count >= 16)
+				spancount = 16;
+			else
+				spancount = count;
+
+			count -= spancount;
+
+			if (count)
+			{
+			// calculate s/z, t/z, zi->fixed s and t at far end of span,
+			// calculate s and t steps across span by shifting
+				sdivz += sdivz16stepu;
+				tdivz += tdivz16stepu;
+				zi += zi16stepu;
+				z = (float)0x10000 / zi;	// prescale to 16.16 fixed-point
+
+				snext = (int)(sdivz * z) + sadjust;
+				if (snext > bbextents)
+					snext = bbextents;
+				else if (snext < 16)
+					snext = 16;	// prevent round-off error on <0 steps from
+								//  from causing overstepping & running off the
+								//  edge of the texture
+
+				tnext = (int)(tdivz * z) + tadjust;
+				if (tnext > bbextentt)
+					tnext = bbextentt;
+				else if (tnext < 16)
+					tnext = 16;	// guard against round-off error on <0 steps
+
+				sstep = (snext - s) >> 4;
+				tstep = (tnext - t) >> 4;
+			}
+			else
+			{
+			// calculate s/z, t/z, zi->fixed s and t at last pixel in span (so
+			// can't step off polygon), clamp, calculate s and t steps across
+			// span by division, biasing steps low so we don't run off the
+			// texture
+				spancountminus1 = (float)(spancount - 1);
+				sdivz += d_sdivzstepu * spancountminus1;
+				tdivz += d_tdivzstepu * spancountminus1;
+				zi += d_zistepu * spancountminus1;
+				z = (float)0x10000 / zi;	// prescale to 16.16 fixed-point
+				snext = (int)(sdivz * z) + sadjust;
+				if (snext > bbextents)
+					snext = bbextents;
+				else if (snext < 16)
+					snext = 16;	// prevent round-off error on <0 steps from
+								//  from causing overstepping & running off the
+								//  edge of the texture
+
+				tnext = (int)(tdivz * z) + tadjust;
+				if (tnext > bbextentt)
+					tnext = bbextentt;
+				else if (tnext < 16)
+					tnext = 16;	// guard against round-off error on <0 steps
+
+				if (spancount > 1)
+				{
+					sstep = (snext - s) / (spancount - 1);
+					tstep = (tnext - t) / (spancount - 1);
+				}
+			}
+
+			switch (spancount)
+			{
+			case 16: *pdest++ = *(pbase + (s >> 16) + (t >> 16) * cachewidth); s += sstep; t += tstep;
+			case 15: *pdest++ = *(pbase + (s >> 16) + (t >> 16) * cachewidth); s += sstep; t += tstep;
+			case 14: *pdest++ = *(pbase + (s >> 16) + (t >> 16) * cachewidth); s += sstep; t += tstep;
+			case 13: *pdest++ = *(pbase + (s >> 16) + (t >> 16) * cachewidth); s += sstep; t += tstep;
+			case 12: *pdest++ = *(pbase + (s >> 16) + (t >> 16) * cachewidth); s += sstep; t += tstep;
+			case 11: *pdest++ = *(pbase + (s >> 16) + (t >> 16) * cachewidth); s += sstep; t += tstep;
+			case 10: *pdest++ = *(pbase + (s >> 16) + (t >> 16) * cachewidth); s += sstep; t += tstep;
+			case 9: *pdest++ = *(pbase + (s >> 16) + (t >> 16) * cachewidth); s += sstep; t += tstep;
+			case 8: *pdest++ = *(pbase + (s >> 16) + (t >> 16) * cachewidth); s += sstep; t += tstep;
+			case 7: *pdest++ = *(pbase + (s >> 16) + (t >> 16) * cachewidth); s += sstep; t += tstep;
+			case 6: *pdest++ = *(pbase + (s >> 16) + (t >> 16) * cachewidth); s += sstep; t += tstep;
+			case 5: *pdest++ = *(pbase + (s >> 16) + (t >> 16) * cachewidth); s += sstep; t += tstep;
+			case 4: *pdest++ = *(pbase + (s >> 16) + (t >> 16) * cachewidth); s += sstep; t += tstep;
+			case 3: *pdest++ = *(pbase + (s >> 16) + (t >> 16) * cachewidth); s += sstep; t += tstep;
+			case 2: *pdest++ = *(pbase + (s >> 16) + (t >> 16) * cachewidth); s += sstep; t += tstep;
+			case 1: *pdest++ = *(pbase + (s >> 16) + (t >> 16) * cachewidth); s += sstep; t += tstep;
+			}
+			s = snext;
+			t = tnext;
+
+		} while (count > 0);
+
+	} while ((pspan = pspan->pnext) != NULL);
+}
 			if (count >= 8)
 				spancount = 8;
 			else
@@ -422,15 +513,50 @@ void D_DrawZSpans (espan_t *pspan)
 
 		if ((doublecount = count >> 1) > 0)
 		{
-			do
+			int n = (doublecount + 7) >> 3;
+			switch (doublecount & 7)
 			{
-				ltemp = izi >> 16;
-				izi += izistep;
-				ltemp |= izi & 0xFFFF0000;
-				izi += izistep;
-				*(int *)pdest = ltemp;
-				pdest += 2;
-			} while (--doublecount > 0);
+			case 0: do {
+				ltemp = izi >> 16; izi += izistep;
+				ltemp |= izi & 0xFFFF0000; izi += izistep;
+				*(int*)pdest = ltemp; pdest += 2;
+
+			case 7:
+				ltemp = izi >> 16; izi += izistep;
+				ltemp |= izi & 0xFFFF0000; izi += izistep;
+				*(int*)pdest = ltemp; pdest += 2;
+
+			case 6:
+				ltemp = izi >> 16; izi += izistep;
+				ltemp |= izi & 0xFFFF0000; izi += izistep;
+				*(int*)pdest = ltemp; pdest += 2;
+
+			case 5:
+				ltemp = izi >> 16; izi += izistep;
+				ltemp |= izi & 0xFFFF0000; izi += izistep;
+				*(int*)pdest = ltemp; pdest += 2;
+
+			case 4:
+				ltemp = izi >> 16; izi += izistep;
+				ltemp |= izi & 0xFFFF0000; izi += izistep;
+				*(int*)pdest = ltemp; pdest += 2;
+
+			case 3:
+				ltemp = izi >> 16; izi += izistep;
+				ltemp |= izi & 0xFFFF0000; izi += izistep;
+				*(int*)pdest = ltemp; pdest += 2;
+
+			case 2:
+				ltemp = izi >> 16; izi += izistep;
+				ltemp |= izi & 0xFFFF0000; izi += izistep;
+				*(int*)pdest = ltemp; pdest += 2;
+
+			case 1:
+				ltemp = izi >> 16; izi += izistep;
+				ltemp |= izi & 0xFFFF0000; izi += izistep;
+				*(int*)pdest = ltemp; pdest += 2;
+			} while (--n > 0);
+			}
 		}
 
 		if (count & 1)
