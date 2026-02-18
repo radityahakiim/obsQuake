@@ -362,15 +362,25 @@ void R_DrawSurfaceBlock8_mip0 (void)
 			lighttemp = lightleft - lightright;
 			lightstep = lighttemp >> 4;
 
-			light = lightright;
+			light = lightleft;
+			lightstep = (lightright - lightleft) >> 4;
 
-			for (b=15; b>=0; b--)
-			{
-				pix = psource[b];
-				prowdest[b] = ((unsigned char *)vid.colormap)
-						[(light & 0xFF00) + pix];
-				light += lightstep;
-			}
+			pix = psource[0]; if (pix == 255) prowdest[0] = 255; else prowdest[0] = ((unsigned char*)vid.colormap)[(light & 0xFF00) + pix]; light += lightstep;
+			pix = psource[1]; if (pix == 255) prowdest[1] = 255; else prowdest[1] = ((unsigned char*)vid.colormap)[(light & 0xFF00) + pix]; light += lightstep;
+			pix = psource[2]; if (pix == 255) prowdest[2] = 255; else prowdest[2] = ((unsigned char*)vid.colormap)[(light & 0xFF00) + pix]; light += lightstep;
+			pix = psource[3]; if (pix == 255) prowdest[3] = 255; else prowdest[3] = ((unsigned char*)vid.colormap)[(light & 0xFF00) + pix]; light += lightstep;
+			pix = psource[4]; if (pix == 255) prowdest[4] = 255; else prowdest[4] = ((unsigned char*)vid.colormap)[(light & 0xFF00) + pix]; light += lightstep;
+			pix = psource[5]; if (pix == 255) prowdest[5] = 255; else prowdest[5] = ((unsigned char*)vid.colormap)[(light & 0xFF00) + pix]; light += lightstep;
+			pix = psource[6]; if (pix == 255) prowdest[6] = 255; else prowdest[6] = ((unsigned char*)vid.colormap)[(light & 0xFF00) + pix]; light += lightstep;
+			pix = psource[7]; if (pix == 255) prowdest[7] = 255; else prowdest[7] = ((unsigned char*)vid.colormap)[(light & 0xFF00) + pix]; light += lightstep;
+			pix = psource[8]; if (pix == 255) prowdest[8] = 255; else prowdest[8] = ((unsigned char*)vid.colormap)[(light & 0xFF00) + pix]; light += lightstep;
+			pix = psource[9]; if (pix == 255) prowdest[9] = 255; else prowdest[9] = ((unsigned char*)vid.colormap)[(light & 0xFF00) + pix]; light += lightstep;
+			pix = psource[10]; if (pix == 255) prowdest[10] = 255; else prowdest[10] = ((unsigned char*)vid.colormap)[(light & 0xFF00) + pix]; light += lightstep;
+			pix = psource[11]; if (pix == 255) prowdest[11] = 255; else prowdest[11] = ((unsigned char*)vid.colormap)[(light & 0xFF00) + pix]; light += lightstep;
+			pix = psource[12]; if (pix == 255) prowdest[12] = 255; else prowdest[12] = ((unsigned char*)vid.colormap)[(light & 0xFF00) + pix]; light += lightstep;
+			pix = psource[13]; if (pix == 255) prowdest[13] = 255; else prowdest[13] = ((unsigned char*)vid.colormap)[(light & 0xFF00) + pix]; light += lightstep;
+			pix = psource[14]; if (pix == 255) prowdest[14] = 255; else prowdest[14] = ((unsigned char*)vid.colormap)[(light & 0xFF00) + pix]; light += lightstep;
+			pix = psource[15]; if (pix == 255) prowdest[15] = 255; else prowdest[15] = ((unsigned char*)vid.colormap)[(light & 0xFF00) + pix]; light += lightstep;
 	
 			psource += sourcetstep;
 			lightright += lightrightstep;
@@ -412,15 +422,17 @@ void R_DrawSurfaceBlock8_mip1 (void)
 			lighttemp = lightleft - lightright;
 			lightstep = lighttemp >> 3;
 
-			light = lightright;
+			light = lightleft;
+			lightstep = (lightright - lightleft) >> 3;
 
-			for (b=7; b>=0; b--)
-			{
-				pix = psource[b];
-				prowdest[b] = ((unsigned char *)vid.colormap)
-						[(light & 0xFF00) + pix];
-				light += lightstep;
-			}
+			pix = psource[0]; if (pix == 255) prowdest[0] = 255; else prowdest[0] = ((unsigned char*)vid.colormap)[(light & 0xFF00) + pix]; light += lightstep;
+			pix = psource[1]; if (pix == 255) prowdest[1] = 255; else prowdest[1] = ((unsigned char*)vid.colormap)[(light & 0xFF00) + pix]; light += lightstep;
+			pix = psource[2]; if (pix == 255) prowdest[2] = 255; else prowdest[2] = ((unsigned char*)vid.colormap)[(light & 0xFF00) + pix]; light += lightstep;
+			pix = psource[3]; if (pix == 255) prowdest[3] = 255; else prowdest[3] = ((unsigned char*)vid.colormap)[(light & 0xFF00) + pix]; light += lightstep;
+			pix = psource[4]; if (pix == 255) prowdest[4] = 255; else prowdest[4] = ((unsigned char*)vid.colormap)[(light & 0xFF00) + pix]; light += lightstep;
+			pix = psource[5]; if (pix == 255) prowdest[5] = 255; else prowdest[5] = ((unsigned char*)vid.colormap)[(light & 0xFF00) + pix]; light += lightstep;
+			pix = psource[6]; if (pix == 255) prowdest[6] = 255; else prowdest[6] = ((unsigned char*)vid.colormap)[(light & 0xFF00) + pix]; light += lightstep;
+			pix = psource[7]; if (pix == 255) prowdest[7] = 255; else prowdest[7] = ((unsigned char*)vid.colormap)[(light & 0xFF00) + pix]; light += lightstep;
 	
 			psource += sourcetstep;
 			lightright += lightrightstep;
@@ -462,15 +474,13 @@ void R_DrawSurfaceBlock8_mip2 (void)
 			lighttemp = lightleft - lightright;
 			lightstep = lighttemp >> 2;
 
-			light = lightright;
+			light = lightleft;
+			lightstep = (lightright - lightleft) >> 2;
 
-			for (b=3; b>=0; b--)
-			{
-				pix = psource[b];
-				prowdest[b] = ((unsigned char *)vid.colormap)
-						[(light & 0xFF00) + pix];
-				light += lightstep;
-			}
+			pix = psource[0]; if (pix == 255) prowdest[0] = 255; else prowdest[0] = ((unsigned char*)vid.colormap)[(light & 0xFF00) + pix]; light += lightstep;
+			pix = psource[1]; if (pix == 255) prowdest[1] = 255; else prowdest[1] = ((unsigned char*)vid.colormap)[(light & 0xFF00) + pix]; light += lightstep;
+			pix = psource[2]; if (pix == 255) prowdest[2] = 255; else prowdest[2] = ((unsigned char*)vid.colormap)[(light & 0xFF00) + pix]; light += lightstep;
+			pix = psource[3]; if (pix == 255) prowdest[3] = 255; else prowdest[3] = ((unsigned char*)vid.colormap)[(light & 0xFF00) + pix]; light += lightstep;
 	
 			psource += sourcetstep;
 			lightright += lightrightstep;
@@ -512,15 +522,11 @@ void R_DrawSurfaceBlock8_mip3 (void)
 			lighttemp = lightleft - lightright;
 			lightstep = lighttemp >> 1;
 
-			light = lightright;
+			light = lightleft;
+			lightstep = (lightright - lightleft) >> 1;
 
-			for (b=1; b>=0; b--)
-			{
-				pix = psource[b];
-				prowdest[b] = ((unsigned char *)vid.colormap)
-						[(light & 0xFF00) + pix];
-				light += lightstep;
-			}
+			pix = psource[0]; if (pix == 255) prowdest[0] = 255; else prowdest[0] = ((unsigned char*)vid.colormap)[(light & 0xFF00) + pix]; light += lightstep;
+			pix = psource[1]; if (pix == 255) prowdest[1] = 255; else prowdest[1] = ((unsigned char*)vid.colormap)[(light & 0xFF00) + pix]; light += lightstep;
 	
 			psource += sourcetstep;
 			lightright += lightrightstep;
@@ -563,8 +569,15 @@ void R_DrawSurfaceBlock16 (void)
 		light = lightleft;
 		pdest = prowdest;
 
-		for (b=0; b<blocksize; b++)
+		for (b=0; b<blocksize - 3; b+=4)
 		{
+			pix = psource[0]; *pdest = vid.colormap16[(light & 0xFF00) + pix]; psource += sourcesstep; pdest++; light += lightstep;
+			pix = psource[0]; *pdest = vid.colormap16[(light & 0xFF00) + pix]; psource += sourcesstep; pdest++; light += lightstep;
+			pix = psource[0]; *pdest = vid.colormap16[(light & 0xFF00) + pix]; psource += sourcesstep; pdest++; light += lightstep;
+			pix = psource[0]; *pdest = vid.colormap16[(light & 0xFF00) + pix]; psource += sourcesstep; pdest++; light += lightstep;
+		}
+
+		for (; b < blocksize; b++) {
 			pix = *psource;
 			*pdest = vid.colormap16[(light & 0xFF00) + pix];
 			psource += sourcesstep;
