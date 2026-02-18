@@ -51,24 +51,34 @@ void D_WarpScreen (void)
 	byte	**row;
 	byte	*rowptr[MAXHEIGHT+(AMP2*2)];
 	int		column[MAXWIDTH+(AMP2*2)];
-	float	wratio, hratio;
+	// float	wratio, hratio;
+	int		wratio_fixed, hratio_fixed;
+	int		w_comp_fixed, h_comp_fixed;
+	int		w_scale_fixed, h_scale_fixed;
 
 	w = r_refdef.vrect.width;
 	h = r_refdef.vrect.height;
 
-	wratio = w / (float)scr_vrect.width;
-	hratio = h / (float)scr_vrect.height;
+	wratio_fixed = (w << 16) / scr_vrect.width;
+	hratio_fixed = (h << 16) / scr_vrect.height;
+
+	w_comp_fixed = (w << 16) / (w + AMP2 * 2);
+	h_comp_fixed = (h << 16) / (h + AMP2 * 2);
+
+	w_scale_fixed = (wratio_fixed * w_comp_fixed) >> 16;
+	h_scale_fixed = (hratio_fixed * h_comp_fixed) >> 16;
 
 	for (v=0 ; v<scr_vrect.height+AMP2*2 ; v++)
 	{
+		int scaled_v = (v * h_scale_fixed) >> 16;
 		rowptr[v] = d_viewbuffer + (r_refdef.vrect.y * screenwidth) +
-				 (screenwidth * (int)((float)v * hratio * h / (h + AMP2 * 2)));
+			(screenwidth * scaled_v);
 	}
 
 	for (u=0 ; u<scr_vrect.width+AMP2*2 ; u++)
 	{
-		column[u] = r_refdef.vrect.x +
-				(int)((float)u * wratio * w / (w + AMP2 * 2));
+		int scaled_u = (u * w_scale_fixed) >> 16;
+		column[u] = r_refdef.vrect.x + scaled_u;
 	}
 
 	turb = intsintable + ((int)(cl.time*SPEED)&(CYCLE-1));
@@ -79,13 +89,20 @@ void D_WarpScreen (void)
 		col = &column[turb[v]];
 		row = &rowptr[v];
 
-		for (u=0 ; u<scr_vrect.width ; u+=4)
+		int u_max = scr_vrect.width & ~7;
+		for (u=0 ; u<u_max ; u+=8)
 		{
-			dest[u+0] = row[turb[u+0]][col[u+0]];
-			dest[u+1] = row[turb[u+1]][col[u+1]];
-			dest[u+2] = row[turb[u+2]][col[u+2]];
-			dest[u+3] = row[turb[u+3]][col[u+3]];
+			dest[u + 0] = row[turb[u + 0]][col[u + 0]];
+			dest[u + 1] = row[turb[u + 1]][col[u + 1]];
+			dest[u + 2] = row[turb[u + 2]][col[u + 2]];
+			dest[u + 3] = row[turb[u + 3]][col[u + 3]];
+			dest[u + 4] = row[turb[u + 4]][col[u + 4]];
+			dest[u + 5] = row[turb[u + 5]][col[u + 5]];
+			dest[u + 6] = row[turb[u + 6]][col[u + 6]];
+			dest[u + 7] = row[turb[u + 7]][col[u + 7]];
 		}
+		for (; u < scr_vrect.width; u++)
+			dest[u] = row[turb[u]][col[u]];
 	}
 }
 
@@ -105,14 +122,107 @@ void D_DrawTurbulent8Span (void)
 	int				tstep	= r_turb_tstep;
 	int*			turb	= r_turb_turb;
 	unsigned char*	pbase	= r_turb_pbase;
-	do
+	int				sturb, tturb;
+
+	switch (count)
 	{
-		int sturb = ((s + turb[(t>>16)&(CYCLE-1)])>>16)&63;
-		int tturb = ((t + turb[(s>>16)&(CYCLE-1)])>>16)&63;
+	case 16:
+		sturb = ((s + turb[(t >> 16) & (CYCLE - 1)]) >> 16) & 63;
+		tturb = ((t + turb[(s >> 16) & (CYCLE - 1)]) >> 16) & 63;
 		*pdest++ = pbase[(tturb << 6) + sturb];
 		s += sstep;
 		t += tstep;
-	} while (--count > 0);
+	case 15:
+		sturb = ((s + turb[(t >> 16) & (CYCLE - 1)]) >> 16) & 63;
+		tturb = ((t + turb[(s >> 16) & (CYCLE - 1)]) >> 16) & 63;
+		*pdest++ = pbase[(tturb << 6) + sturb];
+		s += sstep;
+		t += tstep;
+	case 14:
+		sturb = ((s + turb[(t >> 16) & (CYCLE - 1)]) >> 16) & 63;
+		tturb = ((t + turb[(s >> 16) & (CYCLE - 1)]) >> 16) & 63;
+		*pdest++ = pbase[(tturb << 6) + sturb];
+		s += sstep;
+		t += tstep;
+	case 13:
+		sturb = ((s + turb[(t >> 16) & (CYCLE - 1)]) >> 16) & 63;
+		tturb = ((t + turb[(s >> 16) & (CYCLE - 1)]) >> 16) & 63;
+		*pdest++ = pbase[(tturb << 6) + sturb];
+		s += sstep;
+		t += tstep;
+	case 12:
+		sturb = ((s + turb[(t >> 16) & (CYCLE - 1)]) >> 16) & 63;
+		tturb = ((t + turb[(s >> 16) & (CYCLE - 1)]) >> 16) & 63;
+		*pdest++ = pbase[(tturb << 6) + sturb];
+		s += sstep;
+		t += tstep;
+	case 11:
+		sturb = ((s + turb[(t >> 16) & (CYCLE - 1)]) >> 16) & 63;
+		tturb = ((t + turb[(s >> 16) & (CYCLE - 1)]) >> 16) & 63;
+		*pdest++ = pbase[(tturb << 6) + sturb];
+		s += sstep;
+		t += tstep;
+	case 10:
+		sturb = ((s + turb[(t >> 16) & (CYCLE - 1)]) >> 16) & 63;
+		tturb = ((t + turb[(s >> 16) & (CYCLE - 1)]) >> 16) & 63;
+		*pdest++ = pbase[(tturb << 6) + sturb];
+		s += sstep;
+		t += tstep;
+	case 9:
+		sturb = ((s + turb[(t >> 16) & (CYCLE - 1)]) >> 16) & 63;
+		tturb = ((t + turb[(s >> 16) & (CYCLE - 1)]) >> 16) & 63;
+		*pdest++ = pbase[(tturb << 6) + sturb];
+		s += sstep;
+		t += tstep;
+	case 8:
+		sturb = ((s + turb[(t >> 16) & (CYCLE - 1)]) >> 16) & 63;
+		tturb = ((t + turb[(s >> 16) & (CYCLE - 1)]) >> 16) & 63;
+		*pdest++ = pbase[(tturb << 6) + sturb];
+		s += sstep;
+		t += tstep;
+	case 7:
+		sturb = ((s + turb[(t >> 16) & (CYCLE - 1)]) >> 16) & 63;
+		tturb = ((t + turb[(s >> 16) & (CYCLE - 1)]) >> 16) & 63;
+		*pdest++ = pbase[(tturb << 6) + sturb];
+		s += sstep;
+		t += tstep;
+	case 6:
+		sturb = ((s + turb[(t >> 16) & (CYCLE - 1)]) >> 16) & 63;
+		tturb = ((t + turb[(s >> 16) & (CYCLE - 1)]) >> 16) & 63;
+		*pdest++ = pbase[(tturb << 6) + sturb];
+		s += sstep;
+		t += tstep;
+	case 5:
+		sturb = ((s + turb[(t >> 16) & (CYCLE - 1)]) >> 16) & 63;
+		tturb = ((t + turb[(s >> 16) & (CYCLE - 1)]) >> 16) & 63;
+		*pdest++ = pbase[(tturb << 6) + sturb];
+		s += sstep;
+		t += tstep;
+	case 4:
+		sturb = ((s + turb[(t >> 16) & (CYCLE - 1)]) >> 16) & 63;
+		tturb = ((t + turb[(s >> 16) & (CYCLE - 1)]) >> 16) & 63;
+		*pdest++ = pbase[(tturb << 6) + sturb];
+		s += sstep;
+		t += tstep;
+	case 3:
+		sturb = ((s + turb[(t >> 16) & (CYCLE - 1)]) >> 16) & 63;
+		tturb = ((t + turb[(s >> 16) & (CYCLE - 1)]) >> 16) & 63;
+		*pdest++ = pbase[(tturb << 6) + sturb];
+		s += sstep;
+		t += tstep;
+	case 2:
+		sturb = ((s + turb[(t >> 16) & (CYCLE - 1)]) >> 16) & 63;
+		tturb = ((t + turb[(s >> 16) & (CYCLE - 1)]) >> 16) & 63;
+		*pdest++ = pbase[(tturb << 6) + sturb];
+		s += sstep;
+		t += tstep;
+	case 1:
+		sturb = ((s + turb[(t >> 16) & (CYCLE - 1)]) >> 16) & 63;
+		tturb = ((t + turb[(s >> 16) & (CYCLE - 1)]) >> 16) & 63;
+		*pdest++ = pbase[(tturb << 6) + sturb];
+		s += sstep;
+		t += tstep;
+	}
 	r_turb_pdest = pdest;
 }
 
@@ -263,16 +373,17 @@ void D_DrawSpans8 (espan_t *pspan)
 	unsigned char	*pbase, *pdest;
 	fixed16_t		s, t, snext, tnext, sstep, tstep;
 	float			sdivz, tdivz, zi, z, du, dv, spancountminus1;
-	float			sdivz16stepu, tdivz16stepu, zi16stepu;
+	float			sdivz32stepu, tdivz32stepu, zi32stepu;
 
 	sstep = 0;	// keep compiler happy
 	tstep = 0;	// ditto
 
 	pbase = (unsigned char *)cacheblock;
+	
 
-	sdivz16stepu = d_sdivzstepu * 16;
-	tdivz16stepu = d_tdivzstepu * 16;
-	zi16stepu = d_zistepu * 16;
+	sdivz32stepu = d_sdivzstepu * 32;
+	tdivz32stepu = d_tdivzstepu * 32;
+	zi32stepu = d_zistepu * 32;
 
 	do
 	{
@@ -305,8 +416,8 @@ void D_DrawSpans8 (espan_t *pspan)
 		do
 		{
 		// calculate s and t at the far end of the span
-			if (count >= 16)
-				spancount = 16;
+			if (count >= 32)
+				spancount = 32;
 			else
 				spancount = count;
 
@@ -316,9 +427,9 @@ void D_DrawSpans8 (espan_t *pspan)
 			{
 			// calculate s/z, t/z, zi->fixed s and t at far end of span,
 			// calculate s and t steps across span by shifting
-				sdivz += sdivz16stepu;
-				tdivz += tdivz16stepu;
-				zi += zi16stepu;
+				sdivz += sdivz32stepu;
+				tdivz += tdivz32stepu;
+				zi += zi32stepu;
 				z = (float)0x10000 / zi;	// prescale to 16.16 fixed-point
 
 				snext = (int)(sdivz * z) + sadjust;
@@ -335,8 +446,8 @@ void D_DrawSpans8 (espan_t *pspan)
 				else if (tnext < 16)
 					tnext = 16;	// guard against round-off error on <0 steps
 
-				sstep = (snext - s) >> 4;
-				tstep = (tnext - t) >> 4;
+				sstep = (snext - s) >> 5;
+				tstep = (tnext - t) >> 5;
 			}
 			else
 			{
@@ -372,6 +483,22 @@ void D_DrawSpans8 (espan_t *pspan)
 
 			switch (spancount)
 			{
+			case 32: *pdest++ = *(pbase + (s >> 16) + (t >> 16) * cachewidth); s += sstep; t += tstep;
+			case 31: *pdest++ = *(pbase + (s >> 16) + (t >> 16) * cachewidth); s += sstep; t += tstep;
+			case 30: *pdest++ = *(pbase + (s >> 16) + (t >> 16) * cachewidth); s += sstep; t += tstep;
+			case 29: *pdest++ = *(pbase + (s >> 16) + (t >> 16) * cachewidth); s += sstep; t += tstep;
+			case 28: *pdest++ = *(pbase + (s >> 16) + (t >> 16) * cachewidth); s += sstep; t += tstep;
+			case 27: *pdest++ = *(pbase + (s >> 16) + (t >> 16) * cachewidth); s += sstep; t += tstep;
+			case 26: *pdest++ = *(pbase + (s >> 16) + (t >> 16) * cachewidth); s += sstep; t += tstep;
+			case 25: *pdest++ = *(pbase + (s >> 16) + (t >> 16) * cachewidth); s += sstep; t += tstep;
+			case 24: *pdest++ = *(pbase + (s >> 16) + (t >> 16) * cachewidth); s += sstep; t += tstep;
+			case 23: *pdest++ = *(pbase + (s >> 16) + (t >> 16) * cachewidth); s += sstep; t += tstep;
+			case 22: *pdest++ = *(pbase + (s >> 16) + (t >> 16) * cachewidth); s += sstep; t += tstep;
+			case 21: *pdest++ = *(pbase + (s >> 16) + (t >> 16) * cachewidth); s += sstep; t += tstep;
+			case 20: *pdest++ = *(pbase + (s >> 16) + (t >> 16) * cachewidth); s += sstep; t += tstep;
+			case 19: *pdest++ = *(pbase + (s >> 16) + (t >> 16) * cachewidth); s += sstep; t += tstep;
+			case 18: *pdest++ = *(pbase + (s >> 16) + (t >> 16) * cachewidth); s += sstep; t += tstep;
+			case 17: *pdest++ = *(pbase + (s >> 16) + (t >> 16) * cachewidth); s += sstep; t += tstep;
 			case 16: *pdest++ = *(pbase + (s >> 16) + (t >> 16) * cachewidth); s += sstep; t += tstep;
 			case 15: *pdest++ = *(pbase + (s >> 16) + (t >> 16) * cachewidth); s += sstep; t += tstep;
 			case 14: *pdest++ = *(pbase + (s >> 16) + (t >> 16) * cachewidth); s += sstep; t += tstep;
@@ -572,10 +699,49 @@ void D_DrawZSpans (espan_t *pspan)
 
 		if ((doublecount = count >> 1) > 0)
 		{
-			int n = (doublecount + 7) >> 3;
-			switch (doublecount & 7)
+			int n = (doublecount + 15) >> 4;
+			switch (doublecount & 15)
 			{
 			case 0: do {
+				ltemp = izi >> 16; izi += izistep;
+				ltemp |= izi & 0xFFFF0000; izi += izistep;
+				*(int*)pdest = ltemp; pdest += 2;
+			case 15:
+				ltemp = izi >> 16; izi += izistep;
+				ltemp |= izi & 0xFFFF0000; izi += izistep;
+				*(int*)pdest = ltemp; pdest += 2;
+
+			case 14:
+				ltemp = izi >> 16; izi += izistep;
+				ltemp |= izi & 0xFFFF0000; izi += izistep;
+				*(int*)pdest = ltemp; pdest += 2;
+
+			case 13:
+				ltemp = izi >> 16; izi += izistep;
+				ltemp |= izi & 0xFFFF0000; izi += izistep;
+				*(int*)pdest = ltemp; pdest += 2;
+
+			case 12:
+				ltemp = izi >> 16; izi += izistep;
+				ltemp |= izi & 0xFFFF0000; izi += izistep;
+				*(int*)pdest = ltemp; pdest += 2;
+
+			case 11:
+				ltemp = izi >> 16; izi += izistep;
+				ltemp |= izi & 0xFFFF0000; izi += izistep;
+				*(int*)pdest = ltemp; pdest += 2;
+
+			case 10:
+				ltemp = izi >> 16; izi += izistep;
+				ltemp |= izi & 0xFFFF0000; izi += izistep;
+				*(int*)pdest = ltemp; pdest += 2;
+
+			case 9:
+				ltemp = izi >> 16; izi += izistep;
+				ltemp |= izi & 0xFFFF0000; izi += izistep;
+				*(int*)pdest = ltemp; pdest += 2;
+
+			case 8:
 				ltemp = izi >> 16; izi += izistep;
 				ltemp |= izi & 0xFFFF0000; izi += izistep;
 				*(int*)pdest = ltemp; pdest += 2;
