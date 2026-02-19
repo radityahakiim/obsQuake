@@ -1437,6 +1437,17 @@ void	VID_Init (unsigned char *palette)
 		Cvar_SetValue("vid_config_y", (float)modelist[target_modenum].height);
 	}
 
+	// init vid_refreshrate only if it was never saved
+	if ((int)vid_refreshrate.value <= 0) {
+		int refresh = 60;
+		if (window) {
+			SDL_DisplayMode dm;
+			if (SDL_GetWindowDisplayMode(window, &dm) == 0 && dm.refresh_rate > 0)
+				refresh = dm.refresh_rate;
+		}
+		Cvar_SetValue("vid_refreshrate", (float)refresh);
+	}
+
 	vid_initialized = true;
 	vid_default = target_modenum;
 
@@ -1453,17 +1464,6 @@ void	VID_Init (unsigned char *palette)
 
 	// force save settings on first init
 	Cvar_SetValue("_vid_default_mode_win", (float)vid_current_mode);
-	
-	// init vid_refreshrate only if it was never saved
-	if ((int)vid_refreshrate.value <= 0) {
-		int refresh = 60;
-		if (window) {
-			SDL_DisplayMode dm;
-			if (SDL_GetWindowDisplayMode(window, &dm) == 0 && dm.refresh_rate > 0)
-				refresh = dm.refresh_rate;
-		}
-		Cvar_SetValue("vid_refreshrate", (float)refresh);
-	}
 }
 
 
@@ -1511,41 +1511,141 @@ void	VID_Update(vrect_t* rects)
 	int targ_winternal = quake_surface->w;
 	int targ_hinternal = quake_surface->h;
 
-	// convert 8-bit palette surface to RGBA8888 texture
+	int total_area;
+	int rect_area;
+	vrect_t* r;
+	int update_whole;
 	void* pixels;
 	int pitch;
-	if (SDL_LockTexture(render_texture, NULL, &pixels, &pitch) == 0) {
-		SDL_Palette* pal = quake_surface->format->palette;
-		byte* src = (byte*)quake_surface->pixels;
-		uint32_t* dst = (uint32_t*)pixels;
-		int src_pitch = quake_surface->pitch;
-		int dst_pitch = pitch / 4;
+	int rw, rh;
 
-		for (int y = 0; y < targ_hinternal; y++) {
-				byte* s = src;
-				uint32_t* d = dst;
+	total_area = targ_winternal * targ_hinternal;
+	rect_area = 0;
+	if (!rects)
+		update_whole = 1;
+	else {
+		update_whole = 0;
+		for (r = rects; r; r = r->pnext) {
+			rw = r->width;
+			rh = r->height;
+			if (rw > 0 && rh > 0)
+				rect_area += rw * rh;
+		}
+		if (rect_area * 3 >= total_area)
+			update_whole = 1;
+	}
+
+	// convert 8-bit palette surface to RGBA8888 texture
+	if (update_whole) {
+		unsigned char* src;
+		unsigned* dst;
+		int src_pitch;
+		int dst_pitch;
+		int y;
+		if (SDL_LockTexture(render_texture, NULL, &pixels, &pitch) == 0) {
+			src = (unsigned char*)quake_surface->pixels;
+			dst = (unsigned*)pixels;
+			src_pitch = quake_surface->pitch;
+			dst_pitch = pitch / 4;
+
+			for (int y = 0; y < targ_hinternal; y++) {
+				unsigned char* s = src;
+				unsigned* d = dst;
 				int count = targ_winternal;
 
-				if (count > 0)
-				{
-					int n = (count + 7) / 8; 
+				while (count >= 8) {
+					d[0] = d_8to24table[s[0]];
+					d[1] = d_8to24table[s[1]];
+					d[2] = d_8to24table[s[2]];
+					d[3] = d_8to24table[s[3]];
+					d[4] = d_8to24table[s[4]];
+					d[5] = d_8to24table[s[5]];
+					d[6] = d_8to24table[s[6]];
+					d[7] = d_8to24table[s[7]];
+					s += 8;
+					d += 8;
+					count -= 8;
+				}
 
-					switch (count % 8)
-					{
-					case 0: do {
-						*d++ = d_8to24table[*s++];
-					case 7:      *d++ = d_8to24table[*s++];
-					case 6:      *d++ = d_8to24table[*s++];
-					case 5:      *d++ = d_8to24table[*s++];
-					case 4:      *d++ = d_8to24table[*s++];
-					case 3:      *d++ = d_8to24table[*s++];
-					case 2:      *d++ = d_8to24table[*s++];
-					case 1:      *d++ = d_8to24table[*s++];
-					} while (--n > 0);
-					}
+				while (count > 0) {
+					*d++ = d_8to24table[*s++];
+					count--;
+				}
+
+				src += src_pitch;
+				dst += dst_pitch;
 			}
-			src += src_pitch;
-			dst += dst_pitch;
+			SDL_UnlockTexture(render_texture);
+		}
+	}
+	else {
+		unsigned char* src_line;
+		unsigned* dst_line;
+		int src_pitch;
+		int dst_pitch;
+		int yy;
+		for (r = rects; r; r = r->pnext) {
+			int rx, ry, rw, rh;
+			SDL_Rect lock_rect;
+			rx = r->x;
+			ry = r->y;
+			rw = r->width;
+			rh = r->height;
+
+			if (rx < 0) {
+				rw += rx;
+				rx = 0;
+			}
+			if (ry < 0) {
+				rh += ry;
+				ry = 0;
+			}
+			if (rx + rw > targ_winternal)
+				rw = targ_winternal - rx;
+			if (ry + rh > targ_hinternal)
+				rh = targ_hinternal - ry;
+			if (rw <= 0 || rh <= 0)
+				continue;
+
+			lock_rect.x = rx;
+			lock_rect.y = ry;
+			lock_rect.w = rw;
+			lock_rect.h = rh;
+
+			if (SDL_LockTexture(render_texture, &lock_rect, &pixels, &pitch) != 0)
+				continue;
+
+			src_line = (unsigned char*)quake_surface->pixels + ry * quake_surface->pitch + rx;
+			dst_line = (unsigned*)pixels;
+			src_pitch = quake_surface->pitch;
+			dst_pitch = pitch / 4;
+
+			for (yy = 0; yy < rh; yy++) {
+				unsigned char* s = src_line;
+				unsigned* d = dst_line;
+				int count = rw;
+
+				while (count >= 8) {
+					d[0] = d_8to24table[s[0]];
+					d[1] = d_8to24table[s[1]];
+					d[2] = d_8to24table[s[2]];
+					d[3] = d_8to24table[s[3]];
+					d[4] = d_8to24table[s[4]];
+					d[5] = d_8to24table[s[5]];
+					d[6] = d_8to24table[s[6]];
+					d[7] = d_8to24table[s[7]];
+					s += 8;
+					d += 8;
+					count -= 8;
+				}
+				while (count > 0) {
+					*d++ = d_8to24table[*s++];
+					count--;
+				}
+
+				src_line += src_pitch;
+				dst_line += dst_pitch;
+			}
 		}
 		SDL_UnlockTexture(render_texture);
 	}
@@ -1596,13 +1696,6 @@ void	VID_Update(vrect_t* rects)
 
 			// stop checking once we've successfully applied the config
 			startup_count = 100;
-		}
-
-		// apply fps_max from saved vsync state
-		if (saved_vsync > 0)
-		{
-			float r = (saved_refresh > 0) ? (float)saved_refresh : 60.0f;
-			Cvar_SetValue("fps_max", r);
 		}
 
 		prev_width = vid.width;
@@ -2025,11 +2118,6 @@ void VID_ApplyChanges(qboolean permanent)
 		Cvar_SetValue("vid_vsync", (float)vsync);
 		Cvar_SetValue("vid_fullscreen_mode", (float)fs_mode);
 
-		if (vsync)
-			Cvar_SetValue("fps_max", (float)refresh);
-		else
-			Cvar_SetValue("fps_max", 0.0f);
-		
 		Con_Printf("Video changes applied permanently.\n");
 
 		// save into previous
