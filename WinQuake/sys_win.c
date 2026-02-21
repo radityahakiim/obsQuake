@@ -39,8 +39,10 @@ static double		curtime = 0.0;
 static double		lastcurtime = 0.0;
 static int			lowshift;
 qboolean			isDedicated;
+qboolean			used_virtual_alloc = false;
 static qboolean		sc_return_on_enter = false;
 HANDLE				hinput, houtput;
+quakeparms_t		parms;
 
 static char			*tracking_tag = "Clams & Mooses";
 
@@ -253,19 +255,6 @@ SYSTEM IO
 ===============================================================================
 */
 
-/*
-================
-Sys_MakeCodeWriteable
-================
-*/
-void Sys_MakeCodeWriteable (unsigned long startaddr, unsigned long length)
-{
-	DWORD  flOldProtect;
-
-	if (!VirtualProtect((LPVOID)startaddr, length, PAGE_EXECUTE_READWRITE, &flOldProtect))
-   		Sys_Error("Protection change failed\n");
-}
-
 
 void Sys_SetFPCW (void)
 {
@@ -448,6 +437,15 @@ void Sys_Quit (void)
 
 // shut down QHOST hooks if necessary
 	DeinitConProc ();
+	if (parms.membase) {
+		if (used_virtual_alloc) {
+			VirtualFree(parms.membase, 0, MEM_RELEASE);
+		}
+		else {
+			free(parms.membase);
+		}
+		parms.membase = NULL;
+	}
 
 	exit (0);
 }
@@ -633,12 +631,13 @@ HWND		hwnd_dialog;
 int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
 {
     MSG				msg;
-	quakeparms_t	parms;
 	double			time, oldtime, newtime;
 	MEMORYSTATUSEX	lpBuffer;
 	static	char	cwd[1024];
 	int				t;
 	RECT			rect;
+	size_t			min_mem = 32 * 1024 * 1024;
+	size_t			desired_mem = min_mem;
 
     /* previous instances do not exist in Win32 */
     if (hPrevInstance)
@@ -717,9 +716,20 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	}
 
 // take the greater of all the available memory or half the total memory,
-// but at least 8 Mb and no more than 16 Mb, unless they explicitly
+// but at least 32 Mb, unless they explicitly
 // request otherwise
-	parms.memsize = 64 * 1024 * 1024;
+	if (lpBuffer.ullTotalPhys)
+	{
+		size_t half_total = (size_t)(lpBuffer.ullTotalPhys / 2);
+		size_t avail = (size_t)lpBuffer.ullAvailPhys;
+
+		// choose the smalles of available and half_total
+		// to avoid overcommitting
+		desired_mem = (avail < half_total) ? avail : half_total;
+
+		if (desired_mem < min_mem)
+			desired_mem = min_mem;
+	}
 
 	if (COM_CheckParm ("-heapsize"))
 	{
@@ -728,12 +738,17 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 		if (t < com_argc)
 			parms.memsize = Q_atoi (com_argv[t]) * 1024;
 	}
+	parms.memsize = (int)desired_mem;
 
-	parms.membase = malloc (parms.memsize);
+	parms.membase = VirtualAlloc(NULL, parms.memsize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
 
-	if (!parms.membase)
-		Sys_Error ("Not enough memory free; check disk space\n");
-
+	if (parms.membase)
+		used_virtual_alloc = true;
+	else {
+		parms.membase = malloc(parms.memsize);
+		if (!parms.membase)
+			Sys_Error("Not enough memory free; check disk space\n");
+	}
 	Sys_PageIn (parms.membase, parms.memsize);
 
 	tevent = CreateEvent(NULL, FALSE, FALSE, NULL);
