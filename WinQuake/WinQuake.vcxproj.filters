@@ -255,7 +255,7 @@
     <ClCompile Include="sys_win.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="vid_win.c">
+    <ClCompile Include="vid_sdl.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="view.c">

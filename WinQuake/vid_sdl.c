@@ -20,9 +20,22 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // vid_win.c -- Win32 video driver
 
 #include "quakedef.h"
+#ifdef _WIN32
 #include "winquake.h"
-#include "d_local.h"
 #include "resource.h"
+#endif
+#include "d_local.h"
+
+#ifndef _WIN32
+void IN_ShowMouse (void) {}
+void IN_DeactivateMouse (void) {}
+void IN_HideMouse (void) {}
+void IN_ActivateMouse (void) {}
+void IN_UpdateClipCursor (void) {}
+void IN_ClearStates (void) {}
+
+typedef enum { MS_WINDOWED, MS_FULLSCREEN, MS_FULLDIB, MS_UNINIT } modestate_t;
+#endif
 
 #define MAX_MODE_LIST	100
 #define VID_ROW_SIZE	4
@@ -30,19 +43,11 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 qboolean	dibonly;
 
 extern int		Minimized;
- // HWND		mainwindow;
 
-// HWND WINAPI InitializeWindow (HINSTANCE hInstance, int nCmdShow);
-
-// int			DIBWidth, DIBHeight;
 qboolean	DDActive;
-// RECT		WindowRect;
-// DWORD		WindowStyle, ExWindowStyle;
 
 int			window_center_x, window_center_y, window_x, window_y, window_width, window_height;
-RECT		window_rect;
 
-static DEVMODE	gdevmode;
 static qboolean	startwindowed = 0, windowed_mode_set;
 static int		startup_count = 0;
 static qboolean	vid_initialized = false, vid_palettized;
@@ -51,7 +56,6 @@ static int		vid_fulldib_on_focus_mode;
 static qboolean	force_minimized, in_mode_set, is_mode0x13, force_mode_set;
 static int		vid_stretched, windowed_mouse;
 static qboolean	palette_changed, syscolchg, vid_mode_set, hide_window, pal_is_nostatic;
-static HICON	hIcon;
 static qboolean paused_for_focus = false;
 
 extern int mx_accum;
@@ -107,10 +111,6 @@ unsigned char	vid_curpal[256*3];
 
 unsigned short	d_8to16table[256];
 unsigned	d_8to24table[256];
-
-// int     driver = grDETECT,mode;
-// bool    useWinDirect = true, useDirectDraw = true;
-// MGLDC	*mgldc = NULL,*memdc = NULL,*dibdc = NULL,*windc = NULL;
 
 typedef struct {
 	modestate_t	type;
@@ -386,12 +386,8 @@ void VID_UpdateWindowStatus (void)
 		SDL_GetWindowPosition(window, &window_x, &window_y);
 		SDL_GetWindowSize(window, &window_width, &window_height);
 	}
-	window_rect.left = window_x;
-	window_rect.top = window_y;
-	window_rect.right = window_x + window_width;
-	window_rect.bottom = window_y + window_height;
-	window_center_x = (window_rect.left + window_rect.right) / 2;
-	window_center_y = (window_rect.top + window_rect.bottom) / 2;
+	window_center_x = window_x + window_width / 2;
+	window_center_y = window_y + window_height / 2;
 
 	IN_UpdateClipCursor ();
 }
