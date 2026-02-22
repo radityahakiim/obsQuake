@@ -1110,9 +1110,10 @@ void VID_UnlockBuffer (void)
 	if (lockcount > 0)
 		return;
 
-	if (lockcount < 0)
-		Sys_Error ("Unbalanced unlock");
-
+	if (lockcount < 0){
+		lockcount = 0;
+		return;
+	}
 	SDL_UnlockSurface(quake_surface);
 
 // to turn up any unlocked accesses
