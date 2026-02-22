@@ -137,6 +137,10 @@ void Sys_Quit (void)
 	exit(0);
 }
 
+void Sys_SetFPCW(void)
+{
+}
+
 void Sys_Init(void)
 {
 #if id386
@@ -382,11 +386,7 @@ int main (int c, char **v)
 	parms.argc = com_argc;
 	parms.argv = com_argv;
 
-#ifdef GLQUAKE
-	parms.memsize = 16*1024*1024;
-#else
-	parms.memsize = 8*1024*1024;
-#endif
+	parms.memsize = 32*1024*1024;
 
 	j = COM_CheckParm("-mem");
 	if (j)
