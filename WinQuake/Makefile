@@ -8,7 +8,7 @@ BINDIR ?= $(PREFIX)/games/quake
 
 # Flags
 BASE_CFLAGS = -Dstricmp=strcasecmp -I$(MOUNT_DIR)
-RELEASE_CFLAGS = $(BASE_CFLAGS) -g -O2 -ffast-math -funroll-loops -fomit-frame-pointer -fexpensive-optimizations
+RELEASE_CFLAGS = $(BASE_CFLAGS) -g -O2 -ffast-math -funroll-loops -fomit-frame-pointer -fexpensive-optimizations -std=c11
 DEBUG_CFLAGS = $(BASE_CFLAGS) -g
 
 CFLAGS ?= $(RELEASE_CFLAGS)
@@ -39,7 +39,7 @@ SDL_OBJS_LIST = \
 	cl_demo.o cl_input.o cl_main.o cl_parse.o cl_tent.o chase.o cmd.o \
 	common.o console.o crc.o cvar.o draw.o d_edge.o d_fill.o d_init.o \
 	d_modech.o d_part.o d_polyse.o d_scan.o d_sky.o d_sprite.o d_surf.o \
-	d_vars.o d_zpoint.o host.o host_cmd.o keys.o menu.o mathlib.o model.o \
+	d_vars.o d_zpoint.o host.o host_cmd.o in_sdl_linux.o keys.o menu.o mathlib.o model.o \
 	net_dgrm.o net_loop.o net_main.o net_vcr.o net_udp.o net_bsd.o \
 	pr_cmds.o pr_edict.o pr_exec.o r_aclip.o r_alias.o r_bsp.o \
 	r_light.o r_draw.o r_efrag.o r_edge.o r_misc.o r_main.o r_sky.o \
@@ -53,7 +53,7 @@ GL_OBJS_LIST = \
 	common.o console.o crc.o cvar.o \
 	gl_draw.o gl_mesh.o gl_model.o gl_refrag.o gl_rlight.o gl_rmain.o \
 	gl_rmisc.o gl_rsurf.o gl_screen.o gl_test.o gl_warp.o \
-	host.o host_cmd.o keys.o menu.o mathlib.o net_dgrm.o net_loop.o \
+	host.o host_cmd.o in_sdl_linux.o keys.o menu.o mathlib.o net_dgrm.o net_loop.o \
 	net_main.o net_vcr.o net_udp.o net_bsd.o pr_cmds.o pr_edict.o \
 	pr_exec.o r_part.o sbar.o sv_main.o sv_phys.o sv_move.o sv_user.o \
 	zone.o view.o wad.o world.o cd_linux.o sys_linux.o snd_dma.o \

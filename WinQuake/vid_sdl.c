@@ -27,14 +27,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "d_local.h"
 
 #ifndef _WIN32
-void IN_ShowMouse (void) {}
-void IN_DeactivateMouse (void) {}
-void IN_HideMouse (void) {}
-void IN_ActivateMouse (void) {}
-void IN_UpdateClipCursor (void) {}
-void IN_ClearStates (void) {}
-
-typedef enum { MS_WINDOWED, MS_FULLSCREEN, MS_FULLDIB, MS_UNINIT } modestate_t;
+#include "linuxcrossplat.h"
 #endif
 
 #define MAX_MODE_LIST	100
@@ -42,7 +35,9 @@ typedef enum { MS_WINDOWED, MS_FULLSCREEN, MS_FULLDIB, MS_UNINIT } modestate_t;
 
 qboolean	dibonly;
 
+#ifdef _WIN32
 extern int		Minimized;
+#endif
 
 qboolean	DDActive;
 
@@ -62,7 +57,7 @@ extern int mx_accum;
 extern int my_accum;
 extern qboolean	mouseactive;  // from in_win.c
 
-viddef_t	vid;				// global video state
+extern viddef_t	vid;				// global video state
 
 #define MODE_WINDOWED			0
 #define MODE_SETTABLE_WINDOW	2
@@ -142,6 +137,7 @@ void VID_MenuDraw (void);
 void VID_MenuKey (int key);
 
 void AppActivate(const SDL_Event* event);
+int MapKey(int scancode);
 void VID_UpdateWindowStatus(void);
 SDL_Window* window = NULL;
 // SDL_Surface* screen_surface = NULL; // window surface

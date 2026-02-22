@@ -37,6 +37,8 @@ float	d_sdivzorigin, d_tdivzorigin, d_ziorigin;
 
 fixed16_t	sadjust, tadjust, bbextents, bbextentt;
 
+void (*prealspandrawer)(void);
+
 pixel_t			*cacheblock;
 int				cachewidth;
 pixel_t			*d_viewbuffer;

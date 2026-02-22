@@ -17,7 +17,9 @@
 #include <sys/mman.h>
 #include <errno.h>
 
+#include <SDL.h>
 #include "quakedef.h"
+
 
 qboolean			isDedicated;
 
@@ -28,12 +30,18 @@ char *cachedir = "/tmp";
 
 cvar_t  sys_linerefresh = {"sys_linerefresh","0"};// set for entity display
 
+extern void HandleEvents(void);
 // =======================================================================
 // General routines
 // =======================================================================
 
 void Sys_DebugNumber(int y, int val)
 {
+}
+
+void Sys_SendKeyEvents(void)
+{
+	HandleEvents();
 }
 
 /*
@@ -278,21 +286,24 @@ void Sys_EditFile(char *filename)
 
 }
 
-double Sys_FloatTime (void)
+double Sys_DoubleTime (void)
 {
-    struct timeval tp;
-    struct timezone tzp; 
-    static int      secbase; 
-    
-    gettimeofday(&tp, &tzp);  
+	static Uint64 freq = 0;
+	static Uint64 start = 0;
+	static SDL_bool init = SDL_FALSE;
+	Uint64 now;
 
-    if (!secbase)
-    {
-        secbase = tp.tv_sec;
-        return tp.tv_usec/1000000.0;
-    }
-
-    return (tp.tv_sec - secbase) + tp.tv_usec/1000000.0;
+	if (!init)
+	{
+		freq = SDL_GetPerformanceFrequency();
+		if (freq == 0)
+			Sys_Error("No high-resolution performance counter available");
+		start = SDL_GetPerformanceCounter();
+		init = SDL_TRUE;
+		return 0.0;
+	}
+	now = SDL_GetPerformanceCounter();
+	return (double)(now - start) / (double)freq;
 }
 
 // =======================================================================
@@ -399,11 +410,11 @@ int main (int c, char **v)
 		printf ("Linux Quake -- Version %0.3f\n", LINUX_VERSION);
 	}
 
-    oldtime = Sys_FloatTime () - 0.1;
+    oldtime = Sys_DoubleTime () - 0.1;
     while (1)
     {
 // find time spent rendering last frame
-        newtime = Sys_FloatTime ();
+        newtime = Sys_DoubleTime ();
         time = newtime - oldtime;
 
         if (cls.state == ca_dedicated)

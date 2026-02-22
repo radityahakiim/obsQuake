@@ -179,7 +179,7 @@ void Chase_Update(void)
 		float achieved_dist = VectorLength(delta);
 
 		float backoff = 8.0f;
-		backoff = min(backoff, achieved_dist - 1.0f);
+		backoff = fmin(backoff, achieved_dist - 1.0f);
 		if (backoff > 0.0f)
 		{
 			VectorNormalize(delta);
@@ -189,7 +189,7 @@ void Chase_Update(void)
 		// dynamically adjust height if clipped to see over the player better
 		float clip_ratio = 1.0 - trace.fraction;
 		float scale = achieved_dist / chase_back.value;
-		scale = max(0.2f, scale);
+		scale = fmax(0.2f, scale);
 		chase_dest[2] += chase_up.value * clip_ratio * scale;
 	}
 
