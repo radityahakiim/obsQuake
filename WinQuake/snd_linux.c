@@ -26,13 +26,23 @@ static qboolean snd_firsttime = true;
 static SDL_AudioDeviceID sdl_audio;
 static unsigned int gSndBufSize;
 
+static volatile unsigned int dma_completed = 0;
+
 static void SNDDMA_Callback(void* userdata, Uint8* stream, int len)
 {
-	int pos 	= shm->samplepos *  (shm->samplebits / 8);
-	int bufsize = shm->samples 	 *	(shm->samplebits / 8);
-	int len1 	= bufsize - pos;
-	int len2 	= 0;
-	
+	int pos, bufsize, len1, len2, consumed;
+
+	if (!shm || !shm->buffer)
+	{
+		memset(stream, 0, len);
+		return;
+	}
+
+	pos 	= (dma_completed % shm->samples) * (shm->samplebits / 8);
+	bufsize = shm->samples * (shm->samplebits / 8);
+	len1 	= bufsize - pos;
+	len2 	= 0;
+
 	if (len1 > len)
 		len1 = len;
 	else
@@ -42,9 +52,9 @@ static void SNDDMA_Callback(void* userdata, Uint8* stream, int len)
 	if (len2 > 0)
 		memcpy(stream + len1, shm->buffer, len2);
 	
-	shm->samplepos += len / (shm->samplebits / 8);
-	if (shm->samplepos >= shm->samples)
-		shm->samplepos -= shm->samples;
+	consumed = len / (shm->samplebits / 8);
+	dma_completed += consumed;
+	shm->samplepos = dma_completed % shm->samples;
 }
 
 void S_BlockSound (void){
@@ -65,7 +75,7 @@ void S_UnblockSound (void){
 	snd_blocked--;
 	if (snd_blocked == 0)
 	{
-		SDL_PauseAudioDevice(sdl_audio, 1);
+		SDL_PauseAudioDevice(sdl_audio, 0);
 	}
 }
 
@@ -167,7 +177,7 @@ qboolean SNDDMA_Init(void)
 int SNDDMA_GetDMAPos(void)
 {
 	if (!snd_inited) return 0;
-	return shm->samplepos & (shm->samples - 1);
+	return dma_completed % shm->samples;
 
 }
 
@@ -175,6 +185,7 @@ void SNDDMA_Shutdown(void)
 {
 	if (snd_inited)
 	{
+		SDL_PauseAudioDevice(sdl_audio, 1);
 		SDL_CloseAudioDevice(sdl_audio);
 		sdl_audio = 0;
 		if (shm && shm->buffer)
