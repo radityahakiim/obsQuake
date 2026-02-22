@@ -21,7 +21,12 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #ifdef _WIN32
 #include "winquake.h"
+#else
+#include "linuxcrossplat.h"
+extern modestate_t modestate;
+extern cvar_t _windowed_mouse;
 #endif
+
 
 void (*vid_menudrawfn)(void);
 void (*vid_menukeyfn)(int key);
@@ -1038,11 +1043,7 @@ again:
 //=============================================================================
 /* OPTIONS MENU */
 
-#ifdef _WIN32
 #define	OPTIONS_ITEMS	14
-#else
-#define	OPTIONS_ITEMS	13
-#endif
 
 #define	SLIDER_RANGE	10
 
@@ -1054,12 +1055,10 @@ void M_Menu_Options_f (void)
 	m_state = m_options;
 	m_entersound = true;
 
-#ifdef _WIN32
 	if ((options_cursor == 13) && (modestate != MS_WINDOWED))
 	{
 		options_cursor = 0;
 	}
-#endif
 }
 
 
@@ -1139,11 +1138,9 @@ void M_AdjustSliders (int dir)
 		Cvar_SetValue ("lookstrafe", !lookstrafe.value);
 		break;
 
-#ifdef _WIN32
 	case 13:	// _windowed_mouse
 		Cvar_SetValue ("_windowed_mouse", !_windowed_mouse.value);
 		break;
-#endif
 	}
 }
 
@@ -1225,13 +1222,11 @@ void M_Options_Draw (void)
 	if (vid_menudrawfn)
 		M_Print (16, 128, "         Video Options");
 
-#ifdef _WIN32
 	if (modestate == MS_WINDOWED)
 	{
 		M_Print (16, 136, "             Use Mouse");
 		M_DrawCheckbox (220, 136, _windowed_mouse.value);
 	}
-#endif
 
 // cursor
 	M_DrawCharacter (200, 32 + options_cursor*8, 12+((int)(realtime*4)&1));
@@ -1300,7 +1295,6 @@ void M_Options_Key (int k)
 			options_cursor = 0;
 	}
 
-#ifdef _WIN32
 	if ((options_cursor == 13) && (modestate != MS_WINDOWED))
 	{
 		if (k == K_UPARROW)
@@ -1308,7 +1302,6 @@ void M_Options_Key (int k)
 		else
 			options_cursor = 0;
 	}
-#endif
 }
 
 //=============================================================================

@@ -13,7 +13,6 @@ void S_BlockSound(void);
 void S_UnblockSound(void);
 
 extern qboolean ActiveApp, Minimized;
-
 #undef VID_LockBuffer
 #undef VID_UnlockBuffer
 
