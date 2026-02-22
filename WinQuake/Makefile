@@ -1,4 +1,4 @@
-CC = gcc
+CC = gcc -m32
 MOUNT_DIR = .
 BUILD_DIR = build
 
@@ -17,8 +17,8 @@ CFLAGS ?= $(RELEASE_CFLAGS)
 LDFLAGS = -lm
 
 # SDL2
-SDL_CFLAGS = `sdl2-config --cflags`
-SDL_LDFLAGS = `sdl2-config --libs` -lm
+SDL_CFLAGS  = `PKG_CONFIG_PATH=/usr/lib32/pkgconfig pkg-config --cflags sdl2`
+SDL_LDFLAGS = `PKG_CONFIG_PATH=/usr/lib32/pkgconfig pkg-config --libs sdl2`
 
 # GLQuake
 GL_LDFLAGS = -lGL -lX11 -lXext -ldl -lm
@@ -76,7 +76,7 @@ sdlquake:  $(BUILD_DIR)/bin/sdlquake
 # ==================== SDL2 TARGET ====================
 $(BUILD_DIR)/bin/sdlquake: $(SDL_OBJS)
 	@echo "Linking SDLQuake..."
-	@$(CC) $(CFLAGS) -o $@ $(SDL_OBJS) $(SDL_LDFLAGS)
+	@$(CC) $(CFLAGS) -o $@ $(SDL_OBJS) $(SDL_LDFLAGS) $(LDFLAGS)
 
 # ==================== GL TARGET ====================
 $(BUILD_DIR)/bin/glquake: $(GL_OBJS)
