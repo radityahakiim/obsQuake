@@ -42,8 +42,24 @@ typedef struct
 	memblock_t	*rover;
 } memzone_t;
 
+typedef struct cache_system_s
+{
+	int						size;		// including this header
+	cache_user_t* user;
+	char					name[16];
+	struct cache_system_s* prev, * next;
+	struct cache_system_s* lru_prev, * lru_next;	// for LRU flushing	
+} cache_system_t;
+
+cache_system_t* Cache_TryAlloc(int size, qboolean nobottom);
+
+cache_system_t	cache_head;
+
 void Cache_FreeLow (int new_low_hunk);
 void Cache_FreeHigh (int new_high_hunk);
+
+extern void Sys_CommitMemory(void* ptr, int size);
+extern void Sys_DecommitMemory(void* ptr, int size);
 
 
 /*
@@ -88,6 +104,7 @@ void Z_ClearZone (memzone_t *zone, int size)
 	block->tag = 0;			// free block
 	block->id = ZONEID;
 	block->size = size - sizeof(memzone_t);
+	Sys_CommitMemory(zone, size);
 }
 
 
@@ -416,7 +433,7 @@ void *Hunk_AllocName (int size, char *name)
 	hunk_low_used += size;
 
 	Cache_FreeLow (hunk_low_used);
-
+	Sys_CommitMemory(h, size);
 	memset (h, 0, size);
 	
 	h->size = size;
@@ -445,7 +462,7 @@ void Hunk_FreeToLowMark (int mark)
 {
 	if (mark < 0 || mark > hunk_low_used)
 		Sys_Error ("Hunk_FreeToLowMark: bad mark %i", mark);
-	memset (hunk_base + mark, 0, hunk_low_used - mark);
+	Sys_DecommitMemory(hunk_base + mark, hunk_low_used - mark);
 	hunk_low_used = mark;
 }
 
@@ -469,7 +486,7 @@ void Hunk_FreeToHighMark (int mark)
 	}
 	if (mark < 0 || mark > hunk_high_used)
 		Sys_Error ("Hunk_FreeToHighMark: bad mark %i", mark);
-	memset (hunk_base + hunk_size - hunk_high_used, 0, hunk_high_used - mark);
+	Sys_DecommitMemory(hunk_base + hunk_size - hunk_high_used, hunk_high_used - mark);
 	hunk_high_used = mark;
 }
 
@@ -508,7 +525,7 @@ void *Hunk_HighAllocName (int size, char *name)
 	Cache_FreeHigh (hunk_high_used);
 
 	h = (hunk_t *)(hunk_base + hunk_size - hunk_high_used);
-
+	Sys_CommitMemory(h, size);
 	memset (h, 0, size);
 	h->size = size;
 	h->sentinal = HUNK_SENTINAL;
@@ -553,19 +570,6 @@ CACHE MEMORY
 
 ===============================================================================
 */
-
-typedef struct cache_system_s
-{
-	int						size;		// including this header
-	cache_user_t			*user;
-	char					name[16];
-	struct cache_system_s	*prev, *next;
-	struct cache_system_s	*lru_prev, *lru_next;	// for LRU flushing	
-} cache_system_t;
-
-cache_system_t *Cache_TryAlloc (int size, qboolean nobottom);
-
-cache_system_t	cache_head;
 
 /*
 ===========
@@ -614,7 +618,7 @@ void Cache_FreeLow (int new_low_hunk)
 			return;		// nothing in cache at all
 		if ((byte *)c >= hunk_base + new_low_hunk)
 			return;		// there is space to grow the hunk
-		Cache_Move ( c );	// reclaim the space
+		Cache_Free ( c->user );	// reclaim the space
 	}
 }
 
@@ -627,23 +631,16 @@ Throw things out until the hunk can be expanded to the given point
 */
 void Cache_FreeHigh (int new_high_hunk)
 {
-	cache_system_t	*c, *prev;
+	cache_system_t	*c;
 	
-	prev = NULL;
 	while (1)
 	{
 		c = cache_head.prev;
 		if (c == &cache_head)
 			return;		// nothing in cache at all
-		if ( (byte *)c + c->size <= hunk_base + hunk_size - new_high_hunk)
-			return;		// there is space to grow the hunk
-		if (c == prev)
-			Cache_Free (c->user);	// didn't move out of the way
-		else
-		{
-			Cache_Move (c);	// try to move it
-			prev = c;
-		}
+		if ((byte*)c + c->size <= hunk_base + hunk_size - new_high_hunk)
+			return;		// there is space here
+		Cache_Free(c->user);	// reclaim the space
 	}
 }
 
@@ -689,6 +686,7 @@ cache_system_t *Cache_TryAlloc (int size, qboolean nobottom)
 			Sys_Error ("Cache_TryAlloc: %i is greater then free hunk", size);
 
 		new = (cache_system_t *) (hunk_base + hunk_low_used);
+		Sys_CommitMemory(new, size);
 		memset (new, 0, sizeof(*new));
 		new->size = size;
 
@@ -710,6 +708,7 @@ cache_system_t *Cache_TryAlloc (int size, qboolean nobottom)
 		{
 			if ( (byte *)cs - (byte *)new >= size)
 			{	// found space
+				Sys_CommitMemory(new, size);
 				memset (new, 0, sizeof(*new));
 				new->size = size;
 				
@@ -733,6 +732,7 @@ cache_system_t *Cache_TryAlloc (int size, qboolean nobottom)
 // try to allocate one at the very end
 	if ( hunk_base + hunk_size - hunk_high_used - (byte *)new >= size)
 	{
+		Sys_CommitMemory(new, size);
 		memset (new, 0, sizeof(*new));
 		new->size = size;
 		
@@ -837,6 +837,7 @@ void Cache_Free (cache_user_t *c)
 	c->data = NULL;
 
 	Cache_UnlinkLRU (cs);
+	Sys_DecommitMemory(cs, cs->size);
 }
 
 

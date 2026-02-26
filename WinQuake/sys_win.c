@@ -84,6 +84,47 @@ void Sys_PageIn (void *ptr, int size)
 	}
 }
 
+/*
+================
+Sys_CommitMemory
+================
+*/
+void Sys_CommitMemory(void* ptr, int size)
+{
+	if (used_virtual_alloc)
+	{
+		VirtualAlloc(ptr, size, MEM_COMMIT, PAGE_READWRITE);
+	}
+}
+
+/*
+================
+Sys_DecommitMemory
+================
+*/
+void Sys_DecommitMemory(void* ptr, int size)
+{
+	if (used_virtual_alloc && ptr && size > 0)
+	{
+		size_t p = (size_t)ptr;
+		size_t offset = p & 4095;
+
+		if (offset)
+		{
+			size_t advance = 4096 - offset;
+			if ((size_t)size <= advance)
+				return;
+			p += advance;
+			size -= (int)advance;
+		}
+
+		size &= ~4095; // Only decommit full 4KB pages
+
+		if (size > 0)
+			VirtualFree((void*)p, size, MEM_DECOMMIT);
+	}
+}
+
 
 /*
 ===============================================================================
@@ -636,8 +677,6 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	static	char	cwd[1024];
 	int				t;
 	RECT			rect;
-	size_t			min_mem = 32 * 1024 * 1024;
-	size_t			desired_mem = min_mem;
 
     /* previous instances do not exist in Win32 */
     if (hPrevInstance)
@@ -718,18 +757,7 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 // take the greater of all the available memory or half the total memory,
 // but at least 32 Mb, unless they explicitly
 // request otherwise
-	if (lpBuffer.ullTotalPhys)
-	{
-		size_t half_total = (size_t)(lpBuffer.ullTotalPhys / 2);
-		size_t avail = (size_t)lpBuffer.ullAvailPhys;
-
-		// choose the smalles of available and half_total
-		// to avoid overcommitting
-		desired_mem = (avail < half_total) ? avail : half_total;
-
-		if (desired_mem < min_mem)
-			desired_mem = min_mem;
-	}
+	parms.memsize = 512 * 1024 * 1024;
 
 	if (COM_CheckParm ("-heapsize"))
 	{
@@ -738,9 +766,8 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 		if (t < com_argc)
 			parms.memsize = Q_atoi (com_argv[t]) * 1024;
 	}
-	parms.memsize = (int)desired_mem;
 
-	parms.membase = VirtualAlloc(NULL, parms.memsize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+	parms.membase = VirtualAlloc(NULL, parms.memsize, MEM_RESERVE, PAGE_READWRITE);
 
 	if (parms.membase)
 		used_virtual_alloc = true;
@@ -749,7 +776,7 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 		if (!parms.membase)
 			Sys_Error("Not enough memory free; check disk space\n");
 	}
-	Sys_PageIn (parms.membase, parms.memsize);
+	// Sys_PageIn (parms.membase, parms.memsize);
 
 	tevent = CreateEvent(NULL, FALSE, FALSE, NULL);
 
