@@ -22,6 +22,7 @@
 
 
 qboolean			isDedicated;
+qboolean			used_mmap = false;
 
 int nostdout = 0;
 
@@ -290,6 +291,48 @@ void Sys_EditFile(char *filename)
 
 }
 
+void Sys_CommitMemory(void* ptr, int size)
+{
+	if (used_mmap && ptr && size > 0)
+	{
+		size_t p = (size_t)ptr;
+		size_t offset = p & 4095;
+
+		p -= offset;
+		size += offset;
+
+		if (mprotect((void*)p, size, PROT_READ | PROT_WRITE) == -1)
+		{
+			Sys_Error("Sys_CommitMemory: mprotect failed");
+		}
+	}
+}
+
+void Sys_DecommitMemory(void* ptr, int size)
+{
+	if (used_mmap && ptr && size > 0)
+	{
+		size_t p = (size_t)ptr;
+		size_t offset = p & 4095;
+
+		if (offset)
+		{
+			size_t advance = 4096 - offset;
+			if ((size_t)size <= advance)
+				return;
+			p += advance;
+			size -= (int)advance;
+		}
+		size &= ~4095;
+
+		if (size > 0)
+		{
+			madvise((void*)p, size, MADV_DONTNEED);
+			mprotect((void*)p, size, PROT_NONE);
+		}
+	}
+}
+
 double Sys_DoubleTime (void)
 {
 	static Uint64 freq = 0;
@@ -391,7 +434,15 @@ int main (int c, char **v)
 	j = COM_CheckParm("-mem");
 	if (j)
 		parms.memsize = (int) (Q_atof(com_argv[j+1]) * 1024 * 1024);
-	parms.membase = malloc (parms.memsize);
+	parms.membase = mmap(NULL, parms.memsize, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+
+	if (parms.membase && parms.membase != MAP_FAILED)
+		used_mmap = true;
+	else {
+		parms.membase = malloc (parms.memsize);
+		if (!parms.membase)
+			Sys_Error("Not enough memory free; check disk space\n");
+	}
 
 	parms.basedir = basedir;
 // caching is disabled by default, use -cachedir to enable
