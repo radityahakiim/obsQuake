@@ -1662,7 +1662,7 @@ void	VID_Update(vrect_t* rects)
 		int saved_w = (int)vid_config_x.value;
 		int saved_h = (int)vid_config_y.value;
 
-		if (saved_w > 0 && saved_h > 0 && (vid.width != saved_w || vid.height != saved_h))
+		if (saved_w > 0 && saved_h > 0 && (modelist[vid_modenum].width != saved_w || modelist[vid_modenum].height != saved_h))
 			need_reapply = true;
 
 		if (saved_fs != 0 && modestate == MS_WINDOWED)
@@ -1691,8 +1691,8 @@ void	VID_Update(vrect_t* rects)
 			startup_count = 100;
 		}
 
-		prev_width = vid.width;
-		prev_height = vid.height;
+		prev_width = modelist[vid_modenum].width;
+		prev_height = modelist[vid_modenum].height;
 		prev_refresh = (saved_refresh > 0) ? saved_refresh : 60;
 		prev_vsync = saved_vsync;
 		prev_fullscreen = saved_fs;
@@ -2153,8 +2153,8 @@ void VID_MenuDraw(void)
 	// store originals on first entry
 	static qboolean first_entry = true;
 	if (first_entry) {
-		prev_width = vid.width;
-		prev_height = vid.height;
+		prev_width = modelist[vid_modenum].width;
+		prev_height = modelist[vid_modenum].height;
 		prev_refresh = (vid_refreshrate.value > 0) ? (int)vid_refreshrate.value : 60;
 		prev_vsync = (int)vid_vsync.value;
 		if (prev_vsync != 0 && prev_vsync != 1) prev_vsync = 0;
