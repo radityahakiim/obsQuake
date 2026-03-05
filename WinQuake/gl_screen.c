@@ -89,6 +89,7 @@ cvar_t		scr_showturtle = {"showturtle","0"};
 cvar_t		scr_showpause = {"showpause","1"};
 cvar_t		scr_printspeed = {"scr_printspeed","8"};
 cvar_t		gl_triplebuffer = {"gl_triplebuffer", "1", true };
+cvar_t		scr_showfps = { "scr_showfps", "0", true };
 
 extern	cvar_t	crosshair;
 
@@ -415,6 +416,7 @@ void SCR_Init (void)
 	Cvar_RegisterVariable (&scr_centertime);
 	Cvar_RegisterVariable (&scr_printspeed);
 	Cvar_RegisterVariable (&gl_triplebuffer);
+	Cvar_RegisterVariable(&scr_showfps);
 
 //
 // register our commands
@@ -525,6 +527,39 @@ void SCR_DrawLoading (void)
 	pic = Draw_CachePic ("gfx/loading.lmp");
 	Draw_Pic ( (vid.width - pic->width)/2, 
 		(vid.height - 48 - pic->height)/2, pic);
+}
+
+/*
+==============
+SCR_DrawFPS
+==============
+*/
+
+void SCR_DrawFPS(void)
+{
+	static double lastTime = 0;
+	static int frameCount = 0;
+	static int fps = 0;
+
+	if (!scr_showfps.value)
+		return;
+
+	double currentTime = Sys_DoubleTime();
+	frameCount++;
+
+	if (currentTime - lastTime >= 1.0)
+	{
+		fps = frameCount;
+		frameCount = 0;
+		lastTime = currentTime;
+	}
+
+	char fpsText[16];
+	snprintf(fpsText, sizeof(fpsText), "%d FPS", fps);
+
+	int x = vid.width - strlen(fpsText) * 8 - 8; // position near the upper-right corner
+	int y = 8; // top margin
+	Draw_String(x, y, fpsText);
 }
 
 
@@ -947,6 +982,7 @@ void SCR_UpdateScreen (void)
 		SCR_DrawTurtle ();
 		SCR_DrawPause ();
 		SCR_CheckDrawCenterString ();
+		SCR_DrawFPS();
 		Sbar_Draw ();
 		SCR_DrawConsole ();	
 		M_Draw ();
