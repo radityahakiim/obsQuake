@@ -8,3 +8,5 @@
 /WinQuake/gas2masm/Debug
 /WinQuake/WinQuake.vcxproj.user
 /WinQuake/gas2masm/gas2masm.vcxproj.user
+/WinQuake/Release
+/WinQuake/release_gl
