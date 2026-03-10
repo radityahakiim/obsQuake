@@ -341,7 +341,7 @@ R_DrawSurfaceBlock8_mip0
 */
 void R_DrawSurfaceBlock8_mip0 (void)
 {
-	int				v, i, b, lightstep, lighttemp, light;
+	int				v, i, lightstep, lighttemp, light;
 	unsigned char	pix, *psource, *prowdest;
 
 	psource = pbasesource;
@@ -359,9 +359,6 @@ void R_DrawSurfaceBlock8_mip0 (void)
 
 		for (i=0 ; i<16 ; i++)
 		{
-			lighttemp = lightleft - lightright;
-			lightstep = lighttemp >> 4;
-
 			light = lightleft;
 			lightstep = (lightright - lightleft) >> 4;
 
@@ -401,7 +398,7 @@ R_DrawSurfaceBlock8_mip1
 */
 void R_DrawSurfaceBlock8_mip1 (void)
 {
-	int				v, i, b, lightstep, lighttemp, light;
+	int				v, i, lightstep, lighttemp, light;
 	unsigned char	pix, *psource, *prowdest;
 
 	psource = pbasesource;
@@ -419,9 +416,6 @@ void R_DrawSurfaceBlock8_mip1 (void)
 
 		for (i=0 ; i<8 ; i++)
 		{
-			lighttemp = lightleft - lightright;
-			lightstep = lighttemp >> 3;
-
 			light = lightleft;
 			lightstep = (lightright - lightleft) >> 3;
 
@@ -453,7 +447,7 @@ R_DrawSurfaceBlock8_mip2
 */
 void R_DrawSurfaceBlock8_mip2 (void)
 {
-	int				v, i, b, lightstep, lighttemp, light;
+	int				v, i, lightstep, lighttemp, light;
 	unsigned char	pix, *psource, *prowdest;
 
 	psource = pbasesource;
@@ -471,9 +465,6 @@ void R_DrawSurfaceBlock8_mip2 (void)
 
 		for (i=0 ; i<4 ; i++)
 		{
-			lighttemp = lightleft - lightright;
-			lightstep = lighttemp >> 2;
-
 			light = lightleft;
 			lightstep = (lightright - lightleft) >> 2;
 
@@ -501,7 +492,7 @@ R_DrawSurfaceBlock8_mip3
 */
 void R_DrawSurfaceBlock8_mip3 (void)
 {
-	int				v, i, b, lightstep, lighttemp, light;
+	int				v, i, lightstep, lighttemp, light;
 	unsigned char	pix, *psource, *prowdest;
 
 	psource = pbasesource;
@@ -519,9 +510,6 @@ void R_DrawSurfaceBlock8_mip3 (void)
 
 		for (i=0 ; i<2 ; i++)
 		{
-			lighttemp = lightleft - lightright;
-			lightstep = lighttemp >> 1;
-
 			light = lightleft;
 			lightstep = (lightright - lightleft) >> 1;
 
