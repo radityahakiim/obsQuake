@@ -30,6 +30,42 @@ fixed16_t		r_turb_s, r_turb_t, r_turb_sstep, r_turb_tstep;
 int				*r_turb_turb;
 int				r_turb_spancount;
 
+// precomputed reciprocal table
+static const int recip_table[32] = {
+		0,             
+	(1 << 16),
+	(1 << 16) / 2,
+	(1 << 16) / 3,
+	(1 << 16) / 4,
+	(1 << 16) / 5,
+	(1 << 16) / 6,
+	(1 << 16) / 7,
+	(1 << 16) / 8,
+	(1 << 16) / 9,
+	(1 << 16) / 10,
+	(1 << 16) / 11,
+	(1 << 16) / 12,
+	(1 << 16) / 13,
+	(1 << 16) / 14,
+	(1 << 16) / 15,
+	(1 << 16) / 16,
+	(1 << 16) / 17,
+	(1 << 16) / 18,
+	(1 << 16) / 19,
+	(1 << 16) / 20,
+	(1 << 16) / 21,
+	(1 << 16) / 22,
+	(1 << 16) / 23,
+	(1 << 16) / 24,
+	(1 << 16) / 25,
+	(1 << 16) / 26,
+	(1 << 16) / 27,
+	(1 << 16) / 28,
+	(1 << 16) / 29,
+	(1 << 16) / 30,
+	(1 << 16) / 31,
+};
+
 void D_DrawTurbulent8Span (void);
 
 
@@ -370,7 +406,7 @@ D_DrawSpans8
 void D_DrawSpans8 (espan_t *pspan)
 {
 	int				count, spancount;
-	unsigned char	*pbase, *pdest;
+	unsigned char	*__restrict pbase, *__restrict pdest;
 	fixed16_t		s, t, snext, tnext, sstep, tstep;
 	float			sdivz, tdivz, zi, z, du, dv, spancountminus1;
 	float			sdivz32stepu, tdivz32stepu, zi32stepu;
@@ -476,8 +512,9 @@ void D_DrawSpans8 (espan_t *pspan)
 
 				if (spancount > 1)
 				{
-					sstep = (snext - s) / (spancount - 1);
-					tstep = (tnext - t) / (spancount - 1);
+					int recip = recip_table[spancount - 1];
+					sstep = ((snext - s) * (long long)recip) >> 16;
+					tstep = ((tnext - t) * (long long)recip) >> 16;
 				}
 			}
 
@@ -637,8 +674,9 @@ void D_DrawSpans8Trans(espan_t* pspan)
 
 				if (spancount > 1)
 				{
-					sstep = (snext - s) / (spancount - 1);
-					tstep = (tnext - t) / (spancount - 1);
+					int recip = recip_table[spancount - 1];
+					sstep = ((snext - s) * (long long)recip) >> 16;
+					tstep = ((tnext - t) * (long long)recip) >> 16;
 				}
 			}
 
@@ -901,8 +939,9 @@ void D_DrawZSpansTrans(espan_t* pspan)
 
 				if (spancount > 1)
 				{
-					sstep = (snext - s) / (spancount - 1);
-					tstep = (tnext - t) / (spancount - 1);
+					int recip = recip_table[spancount - 1];
+					sstep = ((snext - s) * (long long)recip) >> 16;
+					tstep = ((tnext - t) * (long long)recip) >> 16;
 				}
 			}
 
