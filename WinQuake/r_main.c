@@ -621,6 +621,9 @@ void R_DrawViewModel (void)
 	vec3_t		dist;
 	float		add;
 	dlight_t	*dl;
+	float		old_xscale, old_yscale, old_aliasxscale, old_aliasyscale, old_aliasxcenter, old_aliasycenter;
+	float		current_aspect, ref_aspect, aspect_correction;
+	float		fov_factor;
 	
 	if (!r_drawviewmodel.value)
 		return;
@@ -700,27 +703,33 @@ void R_DrawViewModel (void)
 
 	// section handle fov > 90 for software renderer
 	// save and restore global scale values so world rendering is unaffected
-	float old_xscale = xscale;
-	float old_yscale = yscale;
-	float old_aliasxscale = aliasxscale;
-	float old_aliasyscale = aliasyscale;
-	float old_aliasxcenter = aliasxcenter;
-	float old_aliasycenter = aliasycenter;
+	old_xscale = xscale;
+	old_yscale = yscale;
+	old_aliasxscale = aliasxscale;
+	old_aliasyscale = aliasyscale;
+	old_aliasxcenter = aliasxcenter;
+	old_aliasycenter = aliasycenter;
+
+	// scale projection as if viewport were 4:3
+	current_aspect = (float)r_refdef.vrect.width / (float)r_refdef.vrect.height;
+	ref_aspect = 4.0f / 3.0f;
+	aspect_correction = ref_aspect / current_aspect;
+
+	// apply to both axes so viewmodel distance matches like
+	// when the resolution is 4:3
+	xscale *= aspect_correction;
+	yscale *= aspect_correction;
+	aliasxscale *= aspect_correction;
+	aliasyscale *= aspect_correction;
 
 	if (scr_fov.value > 90.0f)
 	{
-		// for fov factor larger than 1, multiply alias scales by factor
-		// to counteract the wider projection so the model appears at 
-		// a similar screen size
-		float factor = tan(scr_fov.value / 360.0f * M_PI);
-		if (factor < 0.0001f) factor = 0.0001f; // safety clamp
-		
-		// apply scaling for both world and alias scales used by the software alias renderer.
-		// this keeps projection math consistent for alias models (viewmodel)
-		xscale *= factor;
-		yscale *= factor;
-		aliasxscale *= factor;
-		aliasyscale *= factor;
+		fov_factor = tan(scr_fov.value / 360.0f * M_PI);
+		if (fov_factor < 1.0f) fov_factor = 1.0f;
+		xscale *= fov_factor;
+		yscale *= fov_factor;
+		aliasxscale *= fov_factor;
+		aliasyscale *= fov_factor;
 	}
 
 	R_AliasDrawModel(&r_viewlighting);
