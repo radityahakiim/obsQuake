@@ -1652,9 +1652,10 @@ void Mod_LoadAliasModel (model_t *mod, void *buffer)
 	total = end - start;
 	
 	Cache_Alloc (&mod->cache, total, loadname);
-	if (!mod->cache.data)
-		return;
-	memcpy (mod->cache.data, pheader, total);
+	if (mod->cache.data)
+	{
+		memcpy(mod->cache.data, pheader, total);
+	}
 
 	Hunk_FreeToLowMark (start);
 }
