@@ -28,6 +28,7 @@ int	d_y_aspect_shift, d_pix_min, d_pix_max, d_pix_shift;
 
 int		d_scantable[MAXHEIGHT];
 short	*zspantable[MAXHEIGHT]; 
+extern	cvar_t	vid_renderer;
 
 /*
 ================
@@ -37,9 +38,15 @@ D_ViewChanged
 void D_ViewChanged (void)
 {
 	int rowbytes;
+	int d_pix_res;
 
-	if (r_dowarp)
-		rowbytes = WARP_WIDTH;
+	if (vid_renderer.value == 0)
+	{
+		if (r_dowarp)
+			rowbytes = WARP_WIDTH;
+		else
+			rowbytes = vid.rowbytes;
+	}
 	else
 		rowbytes = vid.rowbytes;
 
@@ -50,12 +57,20 @@ void D_ViewChanged (void)
 	d_zrowbytes = vid.width * 2;
 	d_zwidth = vid.width;
 
-	d_pix_min = r_refdef.vrect.width / 320;
+	// fix particles (blood, debris) too huge on high resolution
+	if (vid.width >= 1280) {
+		d_pix_res = 1280;
+	}
+	else {
+		d_pix_res = r_refdef.vrect.width;
+	}
+
+	d_pix_min = d_pix_res / 320;
 	if (d_pix_min < 1)
 		d_pix_min = 1;
 
-	d_pix_max = (int)((float)r_refdef.vrect.width / (320.0 / 4.0) + 0.5);
-	d_pix_shift = 8 - (int)((float)r_refdef.vrect.width / 320.0 + 0.5);
+	d_pix_max = (int)(d_pix_res / (320.0 / 4.0) + 0.5);
+	d_pix_shift = 8 - (int)(d_pix_res / 320.0 + 0.5);
 	if (d_pix_max < 1)
 		d_pix_max = 1;
 

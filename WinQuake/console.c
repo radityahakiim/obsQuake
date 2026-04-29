@@ -524,6 +524,7 @@ void Con_DrawNotify (void)
 	int		i;
 	float	time;
 	extern char chat_buffer[];
+	float scale = SCR_GetHudScale();
 
 	v = 0;
 	for (i= con_current-NUM_CON_TIMES+1 ; i<=con_current ; i++)
@@ -542,7 +543,7 @@ void Con_DrawNotify (void)
 		scr_copytop = 1;
 
 		for (x = 0 ; x < con_linewidth ; x++)
-			Draw_Character ( (x+1)<<3, v, text[x]);
+			Draw_CharacterScaled ( (x+1)*8, v, text[x], scale, 0, 0);
 
 		v += 8;
 	}
@@ -555,13 +556,13 @@ void Con_DrawNotify (void)
 	
 		x = 0;
 		
-		Draw_String (8, v, "say:");
+		Draw_StringScaled (8, v, "say:", scale, 0, 0);
 		while(chat_buffer[x])
 		{
-			Draw_Character ( (x+5)<<3, v, chat_buffer[x]);
+			Draw_CharacterScaled ( (x+5)*8, v, chat_buffer[x], scale, 0, 0);
 			x++;
 		}
-		Draw_Character ( (x+5)<<3, v, 10+((int)(realtime*con_cursorspeed)&1));
+		Draw_CharacterScaled ( (x+5)*8, v, 10+((int)(realtime*con_cursorspeed)&1), scale, 0, 0);
 		v += 8;
 	}
 	

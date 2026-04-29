@@ -45,6 +45,10 @@ extern	qboolean	scr_disabled_for_loading;
 extern	qboolean	scr_skipupdate;
 
 extern	cvar_t		scr_viewsize;
+extern	cvar_t		scr_hudscale;
+
+float SCR_GetHudScale (void);
+float SCR_GetMaxHudScale (void);
 
 extern cvar_t scr_viewsize;
 

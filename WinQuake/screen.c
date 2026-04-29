@@ -31,6 +31,7 @@ float		scr_conlines;		// lines of console to display
 
 float		oldscreensize, oldfov;
 cvar_t		scr_viewsize = {"viewsize","100", true};
+cvar_t		scr_hudscale = {"scr_hudscale","2.0", true};
 cvar_t		scr_fov = {"fov","90"};	// 10 - 170
 cvar_t		scr_conspeed = {"scr_conspeed","1500"};
 cvar_t		scr_centertime = {"scr_centertime","2"};
@@ -141,8 +142,12 @@ void SCR_DrawCenterString (void)
 	scr_erase_center = 0;
 	start = scr_centerstring;
 
-	// calculate total height of the text block (lines * 8px per line)
-	total_height = scr_center_lines * 8;
+	float scale = SCR_GetHudScale();
+	int char_w = (int)(8 * scale);
+	int char_h = (int)(8 * scale);
+
+	// calculate total height of the text block (lines * char_h per line)
+	total_height = scr_center_lines * char_h;
 
 	// center vertically: start y at (screen height - text height) / 2
 	y = (vid.height - total_height) / 2;
@@ -187,15 +192,15 @@ void SCR_DrawCenterString (void)
 		for (l=0 ; l<40 ; l++)
 			if (start[l] == '\n' || !start[l])
 				break;
-		x = (vid.width - l*8)/2;
-		for (j=0 ; j<l ; j++, x+=8)
+		int base_x = (vid.width - (int)(l * 8 * scale)) / 2;
+		for (j=0 ; j<l ; j++)
 		{
-			Draw_Character (x, y, start[j]);	
+			Draw_CharacterScaled (j * 8, 0, start[j], scale, base_x, y);	
 			if (!remaining--)
 				return;
 		}
 			
-		y += 8;
+		y += char_h;
 
 		while (*start && *start != '\n')
 			start++;
@@ -341,6 +346,45 @@ void SCR_SizeDown_f (void)
 	vid.recalc_refdef = 1;
 }
 
+/*
+=================
+SCR_GetHudScale
+=================
+*/
+float SCR_GetHudScale(void)
+{
+	float scale = scr_hudscale.value;
+	float max_scale_x, max_scale_y, max_scale;
+
+	if (scale < 1.0f) scale = 1.0f;
+
+	// clamp so the virtual 320x200 canvas never exceeds screen size
+	max_scale_x = (float)vid.width / 320.0f;
+	max_scale_y = (float)vid.height / 200.0f;
+	max_scale = (max_scale_x < max_scale_y) ? max_scale_x : max_scale_y;
+
+	if (max_scale < 1.0f) max_scale = 1.0f;
+	if (scale > max_scale) scale = max_scale;
+
+	return scale;
+}
+
+/*
+=================
+SCR_GetMaxHudScale
+
+Returns the maximum allowed HUD scale for the current resolution
+=================
+*/
+float SCR_GetMaxHudScale(void)
+{
+	float max_scale_x = (float)vid.width / 320.0f;
+	float max_scale_y = (float)vid.height / 200.0f;
+	float max_scale = (max_scale_x < max_scale_y) ? max_scale_x : max_scale_y;
+	if (max_scale < 1.0f) max_scale = 1.0f;
+	return max_scale;
+}
+
 //============================================================================
 
 /*
@@ -352,6 +396,7 @@ void SCR_Init (void)
 {
 	Cvar_RegisterVariable (&scr_fov);
 	Cvar_RegisterVariable (&scr_viewsize);
+	Cvar_RegisterVariable (&scr_hudscale);
 	Cvar_RegisterVariable (&scr_conspeed);
 	Cvar_RegisterVariable (&scr_showram);
 	Cvar_RegisterVariable (&scr_showturtle);
@@ -389,7 +434,8 @@ void SCR_DrawRam (void)
 	if (!r_cache_thrash)
 		return;
 
-	Draw_Pic (scr_vrect.x+32, scr_vrect.y, scr_ram);
+	float scale = SCR_GetHudScale();
+	Draw_PicScaled (0, 0, scr_ram, scale, scr_vrect.x + (int)(32 * scale), scr_vrect.y);
 }
 
 /*
@@ -414,7 +460,8 @@ void SCR_DrawTurtle (void)
 	if (count < 3)
 		return;
 
-	Draw_Pic (scr_vrect.x, scr_vrect.y, scr_turtle);
+	float scale = SCR_GetHudScale();
+	Draw_PicScaled (0, 0, scr_turtle, scale, scr_vrect.x, scr_vrect.y);
 }
 
 /*
@@ -429,7 +476,8 @@ void SCR_DrawNet (void)
 	if (cls.demoplayback)
 		return;
 
-	Draw_Pic (scr_vrect.x+64, scr_vrect.y, scr_net);
+	float scale = SCR_GetHudScale();
+	Draw_PicScaled (0, 0, scr_net, scale, scr_vrect.x + (int)(64 * scale), scr_vrect.y);
 }
 
 /*
@@ -448,8 +496,10 @@ void SCR_DrawPause (void)
 		return;
 
 	pic = Draw_CachePic ("gfx/pause.lmp");
-	Draw_Pic ( (vid.width - pic->width)/2, 
-		(vid.height - 48 - pic->height)/2, pic);
+	float scale = SCR_GetHudScale();
+	int w = (int)(pic->width * scale);
+	int h = (int)(pic->height * scale);
+	Draw_PicScaled (0, 0, pic, scale, (vid.width - w)/2, (vid.height - (int)(48 * scale) - h)/2);
 }
 
 
@@ -499,9 +549,12 @@ void SCR_DrawFPS(void)
 	char fpsText[16];
 	snprintf(fpsText, sizeof(fpsText), "%d FPS", fps);
 
-	int x = vid.width - strlen(fpsText) * 8 - 8; // position near the upper-right corner
-	int y = 8; // top margin
-	Draw_String(x, y, fpsText);
+	float scale = SCR_GetHudScale();
+	int len = strlen(fpsText);
+	int x_offset = vid.width - (int)((len * 8 + 8) * scale);
+	int y_offset = (int)(8 * scale);
+
+	Draw_StringScaled(0, 0, fpsText, scale, x_offset, y_offset);
 }
 
 
@@ -964,6 +1017,8 @@ void SCR_UpdateScreen (void)
 	V_RenderView ();
 
 	VID_UnlockBuffer ();
+
+	VID_CaptureWorld ();
 
 	D_EnableBackBufferAccess ();	// of all overlay stuff if drawing directly
 

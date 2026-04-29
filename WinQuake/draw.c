@@ -900,3 +900,295 @@ void Draw_EndDisc (void)
 	D_EndDirectRect (vid.width - 24, 0, 24, 24);
 }
 
+
+/*
+================
+scaled draw section
+================
+*/
+
+void Draw_CharacterScaled (int virtual_x, int virtual_y, int num, float scale, int x_offset, int y_offset)
+{
+	byte			*dest;
+	byte			*source;
+	unsigned short	*pusdest;
+	int				row, col;
+	int				v, u;
+	int             sx, sy, ex, ey, draw_w, draw_h;
+
+	if (scale <= 0.0f) scale = 1.0f;
+	
+	sx = (int)(virtual_x * scale);
+	sy = (int)(virtual_y * scale);
+	ex = (int)((virtual_x + 8) * scale);
+	ey = (int)((virtual_y + 8) * scale);
+	
+	sx += x_offset;
+	ex += x_offset;
+	sy += y_offset;
+	ey += y_offset;
+	
+	draw_w = ex - sx;
+	draw_h = ey - sy;
+    
+	if (draw_w <= 0 || draw_h <= 0) return;
+
+	num &= 255;
+	row = num>>4;
+	col = num&15;
+	source = draw_chars + (row<<10) + (col<<3);
+
+	if (r_pixbytes == 1)
+	{
+		for (v=0; v<draw_h; v++) {
+			int src_y = (int)((v * 8.0f) / draw_h);
+			if (src_y >= 8) src_y = 7;
+			if (sy + v < 0 || sy + v >= vid.height) continue;
+			
+			dest = vid.conbuffer + (sy + v)*vid.conrowbytes + sx;
+			
+			for (u=0; u<draw_w; u++) {
+				int src_x = (int)((u * 8.0f) / draw_w);
+				if (src_x >= 8) src_x = 7;
+				if (sx + u < 0 || sx + u >= vid.width) continue;
+				
+				byte p = source[src_y * 128 + src_x];
+				if (p) dest[u] = p;
+			}
+		}
+	}
+	else
+	{
+		for (v=0; v<draw_h; v++) {
+			int src_y = (int)((v * 8.0f) / draw_h);
+			if (src_y >= 8) src_y = 7;
+			if (sy + v < 0 || sy + v >= vid.height) continue;
+			
+			pusdest = (unsigned short *)vid.conbuffer + (sy + v)*(vid.conrowbytes >> 1) + sx;
+			
+			for (u=0; u<draw_w; u++) {
+				int src_x = (int)((u * 8.0f) / draw_w);
+				if (src_x >= 8) src_x = 7;
+				if (sx + u < 0 || sx + u >= vid.width) continue;
+				
+				byte p = source[src_y * 128 + src_x];
+				if (p) pusdest[u] = d_8to16table[p];
+			}
+		}
+	}
+}
+
+void Draw_StringScaled (int virtual_x, int virtual_y, char *str, float scale, int x_offset, int y_offset)
+{
+	while (*str)
+	{
+		Draw_CharacterScaled (virtual_x, virtual_y, *str, scale, x_offset, y_offset);
+		str++;
+		virtual_x += 8;
+	}
+}
+
+void Draw_PicScaled (int virtual_x, int virtual_y, qpic_t *pic, float scale, int x_offset, int y_offset)
+{
+	byte			*dest, *source;
+	unsigned short	*pusdest;
+	int				v, u;
+	int             sx, sy, ex, ey, draw_w, draw_h;
+
+	if (scale <= 0.0f) scale = 1.0f;
+
+	sx = (int)(virtual_x * scale);
+	sy = (int)(virtual_y * scale);
+	ex = (int)((virtual_x + pic->width) * scale);
+	ey = (int)((virtual_y + pic->height) * scale);
+	
+	sx += x_offset;
+	ex += x_offset;
+	sy += y_offset;
+	ey += y_offset;
+	
+	draw_w = ex - sx;
+	draw_h = ey - sy;
+
+	if (draw_w <= 0 || draw_h <= 0) return;
+
+	source = pic->data;
+
+	if (r_pixbytes == 1)
+	{
+		for (v=0; v<draw_h; v++) {
+			int src_y = (int)((v * (float)pic->height) / draw_h);
+			if (src_y >= pic->height) src_y = pic->height - 1;
+			if (sy + v < 0 || sy + v >= vid.height) continue;
+			
+			dest = vid.buffer + (sy + v)*vid.rowbytes + sx;
+			
+			for (u=0; u<draw_w; u++) {
+				int src_x = (int)((u * (float)pic->width) / draw_w);
+				if (src_x >= pic->width) src_x = pic->width - 1;
+				if (sx + u < 0 || sx + u >= vid.width) continue;
+				
+				dest[u] = source[src_y * pic->width + src_x];
+			}
+		}
+	}
+	else
+	{
+		for (v=0; v<draw_h; v++) {
+			int src_y = (int)((v * (float)pic->height) / draw_h);
+			if (src_y >= pic->height) src_y = pic->height - 1;
+			if (sy + v < 0 || sy + v >= vid.height) continue;
+			
+			pusdest = (unsigned short *)vid.buffer + (sy + v)*(vid.rowbytes >> 1) + sx;
+			
+			for (u=0; u<draw_w; u++) {
+				int src_x = (int)((u * (float)pic->width) / draw_w);
+				if (src_x >= pic->width) src_x = pic->width - 1;
+				if (sx + u < 0 || sx + u >= vid.width) continue;
+				
+				pusdest[u] = d_8to16table[source[src_y * pic->width + src_x]];
+			}
+		}
+	}
+}
+
+void Draw_TransPicScaled (int virtual_x, int virtual_y, qpic_t *pic, float scale, int x_offset, int y_offset)
+{
+	byte			*dest, *source, tbyte;
+	unsigned short	*pusdest;
+	int				v, u;
+	int             sx, sy, ex, ey, draw_w, draw_h;
+
+	if (scale <= 0.0f) scale = 1.0f;
+
+	sx = (int)(virtual_x * scale);
+	sy = (int)(virtual_y * scale);
+	ex = (int)((virtual_x + pic->width) * scale);
+	ey = (int)((virtual_y + pic->height) * scale);
+	
+	sx += x_offset;
+	ex += x_offset;
+	sy += y_offset;
+	ey += y_offset;
+	
+	draw_w = ex - sx;
+	draw_h = ey - sy;
+
+	if (draw_w <= 0 || draw_h <= 0) return;
+
+	source = pic->data;
+
+	if (r_pixbytes == 1)
+	{
+		for (v=0; v<draw_h; v++) {
+			int src_y = (int)((v * (float)pic->height) / draw_h);
+			if (src_y >= pic->height) src_y = pic->height - 1;
+			if (sy + v < 0 || sy + v >= vid.height) continue;
+			
+			dest = vid.buffer + (sy + v)*vid.rowbytes + sx;
+			
+			for (u=0; u<draw_w; u++) {
+				int src_x = (int)((u * (float)pic->width) / draw_w);
+				if (src_x >= pic->width) src_x = pic->width - 1;
+				if (sx + u < 0 || sx + u >= vid.width) continue;
+				
+				tbyte = source[src_y * pic->width + src_x];
+				if (tbyte != TRANSPARENT_COLOR)
+					dest[u] = tbyte;
+			}
+		}
+	}
+	else
+	{
+		for (v=0; v<draw_h; v++) {
+			int src_y = (int)((v * (float)pic->height) / draw_h);
+			if (src_y >= pic->height) src_y = pic->height - 1;
+			if (sy + v < 0 || sy + v >= vid.height) continue;
+			
+			pusdest = (unsigned short *)vid.buffer + (sy + v)*(vid.rowbytes >> 1) + sx;
+			
+			for (u=0; u<draw_w; u++) {
+				int src_x = (int)((u * (float)pic->width) / draw_w);
+				if (src_x >= pic->width) src_x = pic->width - 1;
+				if (sx + u < 0 || sx + u >= vid.width) continue;
+				
+				tbyte = source[src_y * pic->width + src_x];
+				if (tbyte != TRANSPARENT_COLOR)
+					pusdest[u] = d_8to16table[tbyte];
+			}
+		}
+	}
+}
+
+void Draw_TransPicTranslateScaled (int virtual_x, int virtual_y, qpic_t *pic, byte *translation, float scale, int x_offset, int y_offset)
+{
+	byte			*dest, *source, tbyte;
+	unsigned short	*pusdest;
+	int				v, u;
+	int             sx, sy, ex, ey, draw_w, draw_h;
+
+	if (scale <= 0.0f) scale = 1.0f;
+
+	sx = (int)(virtual_x * scale);
+	sy = (int)(virtual_y * scale);
+	ex = (int)((virtual_x + pic->width) * scale);
+	ey = (int)((virtual_y + pic->height) * scale);
+	
+	sx += x_offset;
+	ex += x_offset;
+	sy += y_offset;
+	ey += y_offset;
+	
+	draw_w = ex - sx;
+	draw_h = ey - sy;
+
+	if (draw_w <= 0 || draw_h <= 0) return;
+
+	source = pic->data;
+
+	if (r_pixbytes == 1)
+	{
+		for (v=0; v<draw_h; v++) {
+			int src_y = (int)((v * (float)pic->height) / draw_h);
+			if (src_y >= pic->height) src_y = pic->height - 1;
+			if (sy + v < 0 || sy + v >= vid.height) continue;
+			
+			dest = vid.buffer + (sy + v)*vid.rowbytes + sx;
+			
+			for (u=0; u<draw_w; u++) {
+				int src_x = (int)((u * (float)pic->width) / draw_w);
+				if (src_x >= pic->width) src_x = pic->width - 1;
+				if (sx + u < 0 || sx + u >= vid.width) continue;
+				
+				tbyte = source[src_y * pic->width + src_x];
+				if (tbyte != TRANSPARENT_COLOR)
+					dest[u] = translation[tbyte];
+			}
+		}
+	}
+	else
+	{
+		for (v=0; v<draw_h; v++) {
+			int src_y = (int)((v * (float)pic->height) / draw_h);
+			if (src_y >= pic->height) src_y = pic->height - 1;
+			if (sy + v < 0 || sy + v >= vid.height) continue;
+			
+			pusdest = (unsigned short *)vid.buffer + (sy + v)*(vid.rowbytes >> 1) + sx;
+			
+			for (u=0; u<draw_w; u++) {
+				int src_x = (int)((u * (float)pic->width) / draw_w);
+				if (src_x >= pic->width) src_x = pic->width - 1;
+				if (sx + u < 0 || sx + u >= vid.width) continue;
+				
+				tbyte = source[src_y * pic->width + src_x];
+				if (tbyte != TRANSPARENT_COLOR)
+					pusdest[u] = d_8to16table[translation[tbyte]];
+			}
+		}
+	}
+}
+/*
+================
+end of scaled draw section
+================
+*/

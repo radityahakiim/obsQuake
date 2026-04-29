@@ -259,10 +259,14 @@ Sbar_DrawPic
 */
 void Sbar_DrawPic (int x, int y, qpic_t *pic)
 {
+	float scale = SCR_GetHudScale();
+	int new_width = (int)(320 * scale);
+	int new_height = (int)(SBAR_HEIGHT * scale);
+
 	if (cl.gametype == GAME_DEATHMATCH)
-		Draw_Pic (x /* + ((vid.width - 320)>>1)*/, y + (vid.height-SBAR_HEIGHT), pic);
+		Draw_PicScaled (x, y, pic, scale, 0, vid.height-new_height);
 	else
-		Draw_Pic (x + ((vid.width - 320)>>1), y + (vid.height-SBAR_HEIGHT), pic);
+		Draw_PicScaled (x, y, pic, scale, (vid.width - new_width)/2, vid.height-new_height);
 }
 
 /*
@@ -272,10 +276,14 @@ Sbar_DrawTransPic
 */
 void Sbar_DrawTransPic (int x, int y, qpic_t *pic)
 {
+	float scale = SCR_GetHudScale();
+	int new_width = (int)(320 * scale);
+	int new_height = (int)(SBAR_HEIGHT * scale);
+
 	if (cl.gametype == GAME_DEATHMATCH)
-		Draw_TransPic (x /*+ ((vid.width - 320)>>1)*/, y + (vid.height-SBAR_HEIGHT), pic);
+		Draw_TransPicScaled (x, y, pic, scale, 0, vid.height-new_height);
 	else
-		Draw_TransPic (x + ((vid.width - 320)>>1), y + (vid.height-SBAR_HEIGHT), pic);
+		Draw_TransPicScaled (x, y, pic, scale, (vid.width - new_width)/2, vid.height-new_height);
 }
 
 /*
@@ -287,10 +295,14 @@ Draws one solid graphics character
 */
 void Sbar_DrawCharacter (int x, int y, int num)
 {
+	float scale = SCR_GetHudScale();
+	int new_width = (int)(320 * scale);
+	int new_height = (int)(SBAR_HEIGHT * scale);
+
 	if (cl.gametype == GAME_DEATHMATCH)
-		Draw_Character ( x /*+ ((vid.width - 320)>>1) */ + 4 , y + vid.height-SBAR_HEIGHT, num);
+		Draw_CharacterScaled (x + 4, y, num, scale, 0, vid.height-new_height);
 	else
-		Draw_Character ( x + ((vid.width - 320)>>1) + 4 , y + vid.height-SBAR_HEIGHT, num);
+		Draw_CharacterScaled (x + 4, y, num, scale, (vid.width - new_width)/2, vid.height-new_height);
 }
 
 /*
@@ -300,10 +312,14 @@ Sbar_DrawString
 */
 void Sbar_DrawString (int x, int y, char *str)
 {
+	float scale = SCR_GetHudScale();
+	int new_width = (int)(320 * scale);
+	int new_height = (int)(SBAR_HEIGHT * scale);
+
 	if (cl.gametype == GAME_DEATHMATCH)
-		Draw_String (x /*+ ((vid.width - 320)>>1)*/, y+ vid.height-SBAR_HEIGHT, str);
+		Draw_StringScaled (x, y, str, scale, 0, vid.height-new_height);
 	else
-		Draw_String (x + ((vid.width - 320)>>1), y+ vid.height-SBAR_HEIGHT, str);
+		Draw_StringScaled (x, y, str, scale, (vid.width - new_width)/2, vid.height-new_height);
 }
 
 /*

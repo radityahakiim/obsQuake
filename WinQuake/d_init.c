@@ -36,6 +36,7 @@ float			d_scalemip[NUM_MIPS-1];
 static float	basemip[NUM_MIPS-1] = {1.0, 0.5*0.8, 0.25*0.8};
 
 extern int			d_aflatcolor;
+extern cvar_t		vid_renderer;
 
 void (*d_drawspans) (espan_t *pspan);
 
@@ -122,14 +123,23 @@ D_SetupFrame
 void D_SetupFrame (void)
 {
 	int		i;
-
-	if (r_dowarp)
-		d_viewbuffer = r_warpbuffer;
+	if (vid_renderer.value == 0)
+	{
+		if (r_dowarp)
+			d_viewbuffer = r_warpbuffer;
+		else
+			d_viewbuffer = (void*)(byte*)vid.buffer;
+	}
 	else
-		d_viewbuffer = (void *)(byte *)vid.buffer;
+		d_viewbuffer = (void*)(byte*)vid.buffer;
 
-	if (r_dowarp)
-		screenwidth = WARP_WIDTH;
+	if (vid_renderer.value == 0)
+	{
+		if (r_dowarp)
+			screenwidth = WARP_WIDTH;
+		else
+			screenwidth = vid.rowbytes;
+	}
 	else
 		screenwidth = vid.rowbytes;
 

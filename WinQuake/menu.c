@@ -118,11 +118,14 @@ Draws one solid graphics character
 */
 void M_DrawCharacter (int cx, int line, int num)
 {
-	Draw_Character ( cx + ((vid.width - 320)>>1), line + menu_y_offset, num);
+	float scale = SCR_GetHudScale();
+	int new_width = (int)(320 * scale);
+	Draw_CharacterScaled ( cx, line, num, scale, (vid.width - new_width)/2, menu_y_offset);
 }
 
 void M_Print (int cx, int cy, char *str)
 {
+	float scale = SCR_GetHudScale();
 	while (*str)
 	{
 		M_DrawCharacter (cx, cy, (*str)+128);
@@ -133,6 +136,7 @@ void M_Print (int cx, int cy, char *str)
 
 void M_PrintWhite (int cx, int cy, char *str)
 {
+	float scale = SCR_GetHudScale();
 	while (*str)
 	{
 		M_DrawCharacter (cx, cy, *str);
@@ -143,12 +147,16 @@ void M_PrintWhite (int cx, int cy, char *str)
 
 void M_DrawTransPic (int x, int y, qpic_t *pic)
 {
-	Draw_TransPic (x + ((vid.width - 320)>>1), y + menu_y_offset, pic);
+	float scale = SCR_GetHudScale();
+	int new_width = (int)(320 * scale);
+	Draw_TransPicScaled (x, y, pic, scale, (vid.width - new_width)/2, menu_y_offset);
 }
 
 void M_DrawPic (int x, int y, qpic_t *pic)
 {
-	Draw_Pic (x + ((vid.width - 320)>>1), y + menu_y_offset, pic);
+	float scale = SCR_GetHudScale();
+	int new_width = (int)(320 * scale);
+	Draw_PicScaled (x, y, pic, scale, (vid.width - new_width)/2, menu_y_offset);
 }
 
 byte identityTable[256];
@@ -181,7 +189,9 @@ void M_BuildTranslationTable(int top, int bottom)
 
 void M_DrawTransPicTranslate (int x, int y, qpic_t *pic)
 {
-	Draw_TransPicTranslate (x + ((vid.width - 320)>>1), y + menu_y_offset, pic, translationTable);
+	float scale = SCR_GetHudScale();
+	int new_width = (int)(320 * scale);
+	Draw_TransPicTranslateScaled (x, y, pic, translationTable, scale, (vid.width - new_width)/2, menu_y_offset);
 }
 
 
@@ -1043,7 +1053,7 @@ again:
 //=============================================================================
 /* OPTIONS MENU */
 
-#define	OPTIONS_ITEMS	14
+#define	OPTIONS_ITEMS	15
 
 #define	SLIDER_RANGE	10
 
@@ -1055,7 +1065,7 @@ void M_Menu_Options_f (void)
 	m_state = m_options;
 	m_entersound = true;
 
-	if ((options_cursor == 13) && (modestate != MS_WINDOWED))
+	if ((options_cursor == 14) && (modestate != MS_WINDOWED))
 	{
 		options_cursor = 0;
 	}
@@ -1076,7 +1086,18 @@ void M_AdjustSliders (int dir)
 			scr_viewsize.value = 120;
 		Cvar_SetValue ("viewsize", scr_viewsize.value);
 		break;
-	case 4:	// gamma
+	case 4:	// hud scale
+	{
+		float maxscale = SCR_GetMaxHudScale();
+		scr_hudscale.value += dir * 0.1;
+		if (scr_hudscale.value < 1.0)
+			scr_hudscale.value = 1.0;
+		if (scr_hudscale.value > maxscale)
+			scr_hudscale.value = maxscale;
+		Cvar_SetValue ("scr_hudscale", scr_hudscale.value);
+		break;
+	}
+	case 5:	// gamma
 		v_gamma.value -= dir * 0.05;
 		if (v_gamma.value < 0.5)
 			v_gamma.value = 0.5;
@@ -1084,7 +1105,7 @@ void M_AdjustSliders (int dir)
 			v_gamma.value = 1;
 		Cvar_SetValue ("gamma", v_gamma.value);
 		break;
-	case 5:	// mouse speed
+	case 6:	// mouse speed
 		sensitivity.value += dir * 0.5;
 		if (sensitivity.value < 1)
 			sensitivity.value = 1;
@@ -1092,7 +1113,7 @@ void M_AdjustSliders (int dir)
 			sensitivity.value = 11;
 		Cvar_SetValue ("sensitivity", sensitivity.value);
 		break;
-	case 6:	// music volume
+	case 7:	// music volume
 #ifdef _WIN32
 		bgmvolume.value += dir * 1.0;
 #else
@@ -1104,7 +1125,7 @@ void M_AdjustSliders (int dir)
 			bgmvolume.value = 1;
 		Cvar_SetValue ("bgmvolume", bgmvolume.value);
 		break;
-	case 7:	// sfx volume
+	case 8:	// sfx volume
 		volume.value += dir * 0.1;
 		if (volume.value < 0)
 			volume.value = 0;
@@ -1113,7 +1134,7 @@ void M_AdjustSliders (int dir)
 		Cvar_SetValue ("volume", volume.value);
 		break;
 
-	case 8:	// allways run
+	case 9:	// allways run
 		if (cl_forwardspeed.value > 200)
 		{
 			Cvar_SetValue ("cl_forwardspeed", 200);
@@ -1126,19 +1147,19 @@ void M_AdjustSliders (int dir)
 		}
 		break;
 
-	case 9:	// invert mouse
+	case 10:	// invert mouse
 		Cvar_SetValue ("m_pitch", -m_pitch.value);
 		break;
 
-	case 10:	// lookspring
+	case 11:	// lookspring
 		Cvar_SetValue ("lookspring", !lookspring.value);
 		break;
 
-	case 11:	// lookstrafe
+	case 12:	// lookstrafe
 		Cvar_SetValue ("lookstrafe", !lookstrafe.value);
 		break;
 
-	case 13:	// _windowed_mouse
+	case 14:	// _windowed_mouse
 		Cvar_SetValue ("_windowed_mouse", !_windowed_mouse.value);
 		break;
 	}
@@ -1191,41 +1212,48 @@ void M_Options_Draw (void)
 	r = (scr_viewsize.value - 30) / (120 - 30);
 	M_DrawSlider (220, 56, r);
 
-	M_Print (16, 64, "            Brightness");
-	r = (1.0 - v_gamma.value) / 0.5;
+	M_Print (16, 64, "             HUD Scale");
+	{
+		float maxscale = SCR_GetMaxHudScale();
+		r = (scr_hudscale.value - 1.0) / (maxscale - 1.0);
+	}
 	M_DrawSlider (220, 64, r);
 
-	M_Print (16, 72, "           Mouse Speed");
-	r = (sensitivity.value - 1)/10;
+	M_Print (16, 72, "            Brightness");
+	r = (1.0 - v_gamma.value) / 0.5;
 	M_DrawSlider (220, 72, r);
 
-	M_Print (16, 80, "       CD Music Volume");
-	r = bgmvolume.value;
+	M_Print (16, 80, "           Mouse Speed");
+	r = (sensitivity.value - 1)/10;
 	M_DrawSlider (220, 80, r);
 
-	M_Print (16, 88, "          Sound Volume");
-	r = volume.value;
+	M_Print (16, 88, "       CD Music Volume");
+	r = bgmvolume.value;
 	M_DrawSlider (220, 88, r);
 
-	M_Print (16, 96,  "            Always Run");
-	M_DrawCheckbox (220, 96, cl_forwardspeed.value > 200);
+	M_Print (16, 96, "          Sound Volume");
+	r = volume.value;
+	M_DrawSlider (220, 96, r);
 
-	M_Print (16, 104, "          Invert Mouse");
-	M_DrawCheckbox (220, 104, m_pitch.value < 0);
+	M_Print (16, 104,  "            Always Run");
+	M_DrawCheckbox (220, 104, cl_forwardspeed.value > 200);
 
-	M_Print (16, 112, "            Lookspring");
-	M_DrawCheckbox (220, 112, lookspring.value);
+	M_Print (16, 112, "          Invert Mouse");
+	M_DrawCheckbox (220, 112, m_pitch.value < 0);
 
-	M_Print (16, 120, "            Lookstrafe");
-	M_DrawCheckbox (220, 120, lookstrafe.value);
+	M_Print (16, 120, "            Lookspring");
+	M_DrawCheckbox (220, 120, lookspring.value);
+
+	M_Print (16, 128, "            Lookstrafe");
+	M_DrawCheckbox (220, 128, lookstrafe.value);
 
 	if (vid_menudrawfn)
-		M_Print (16, 128, "         Video Options");
+		M_Print (16, 136, "         Video Options");
 
 	if (modestate == MS_WINDOWED)
 	{
-		M_Print (16, 136, "             Use Mouse");
-		M_DrawCheckbox (220, 136, _windowed_mouse.value);
+		M_Print (16, 144, "             Use Mouse");
+		M_DrawCheckbox (220, 144, _windowed_mouse.value);
 	}
 
 // cursor
@@ -1255,7 +1283,7 @@ void M_Options_Key (int k)
 		case 2:
 			Cbuf_AddText ("exec default.cfg\n");
 			break;
-		case 12:
+		case 13:
 			M_Menu_Video_f ();
 			break;
 		default:
@@ -1287,18 +1315,18 @@ void M_Options_Key (int k)
 		break;
 	}
 
-	if (options_cursor == 12 && vid_menudrawfn == NULL)
+	if (options_cursor == 13 && vid_menudrawfn == NULL)
 	{
 		if (k == K_UPARROW)
-			options_cursor = 11;
+			options_cursor = 12;
 		else
 			options_cursor = 0;
 	}
 
-	if ((options_cursor == 13) && (modestate != MS_WINDOWED))
+	if ((options_cursor == 14) && (modestate != MS_WINDOWED))
 	{
 		if (k == K_UPARROW)
-			options_cursor = 12;
+			options_cursor = 13;
 		else
 			options_cursor = 0;
 	}
@@ -3016,8 +3044,12 @@ void M_Draw (void)
 	{
 		scr_copyeverything = 1;
 
-		// center the 320x200 menu vertically in the current resolution
-		menu_y_offset = (vid.height - 200) >> 1;
+		// center the scaled menu vertically in the current resolution
+		{
+			float mscale = SCR_GetHudScale();
+			int scaled_height = (int)(200 * mscale);
+			menu_y_offset = (vid.height - scaled_height) / 2;
+		}
 		if (menu_y_offset < 0)
 			menu_y_offset = 0;
 

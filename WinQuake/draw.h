@@ -28,6 +28,13 @@ void Draw_Character (int x, int y, int num);
 void Draw_DebugChar (char num);
 void Draw_Pic (int x, int y, qpic_t *pic);
 void Draw_TransPic (int x, int y, qpic_t *pic);
+
+void Draw_CharacterScaled (int virtual_x, int virtual_y, int num, float scale, int x_offset, int y_offset);
+void Draw_StringScaled (int virtual_x, int virtual_y, char *str, float scale, int x_offset, int y_offset);
+void Draw_PicScaled (int virtual_x, int virtual_y, qpic_t *pic, float scale, int x_offset, int y_offset);
+void Draw_TransPicScaled (int virtual_x, int virtual_y, qpic_t *pic, float scale, int x_offset, int y_offset);
+void Draw_TransPicTranslateScaled (int virtual_x, int virtual_y, qpic_t *pic, byte *translation, float scale, int x_offset, int y_offset);
+
 void Draw_TransPicTranslate (int x, int y, qpic_t *pic, byte *translation);
 void Draw_ConsoleBackground (int lines);
 void Draw_BeginDisc (void);

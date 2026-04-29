@@ -74,6 +74,7 @@ float		xscaleshrink, yscaleshrink;
 float		aliasxscale, aliasyscale, aliasxcenter, aliasycenter;
 
 extern int		screenwidth;
+extern cvar_t	vid_renderer;
 
 float	pixelAspect;
 float	screenAspect;
@@ -1092,7 +1093,9 @@ SetVisibilityByPassages ();
 		dp_time2 = Sys_DoubleTime ();
 
 	if (r_dowarp)
-		D_WarpScreen ();
+		if (vid_renderer.value == 0) {
+			D_WarpScreen();
+		}
 
 	V_SetContentsColor (r_viewleaf->contents);
 
