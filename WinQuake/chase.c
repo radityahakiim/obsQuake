@@ -71,7 +71,7 @@ trace_t TraceLine (vec3_t start, vec3_t end)
 	memset (&trace, 0, sizeof(trace));
 	trace.fraction = 1.0f;
 	VectorCopy(end, trace.endpos);
-	SV_RecursiveHullCheck (cl.worldmodel->hulls + 1, 0, 0, 1, start, end, &trace);
+	SV_RecursiveHullCheck (cl.worldmodel->hulls, 0, 0, 1, start, end, &trace);
 
 	return trace;
 }
@@ -96,6 +96,10 @@ void Chase_Update(void)
 	vec3_t player_org;
 	entity_t* ent;
 	vec3_t virtual_player_org;
+	vec3_t desired, old;
+
+	trace_t final_trace, trace;
+	float angle_lerp, pitch_delta, yaw_delta;
 
 
 	if (!chase_active.value)
@@ -133,28 +137,28 @@ void Chase_Update(void)
 	chase_dest[2] = player_org[2] + chase_up.value;
 
 	// add collision detection: trace from player to desired camera pos and clip if necessary
-	vec3_t desired;
 	VectorCopy(chase_dest, desired);
 
-	trace_t trace = TraceLine(player_org, desired);
+	trace = TraceLine(player_org, desired);
 	if (trace.fraction < 1.0f) {
 		vec3_t dir;
 		VectorSubtract(desired, player_org, dir);
 		VectorNormalize(dir);
 
 		// pull camera in front of the hit surface
-		VectorMA(trace.endpos, 6.0f, dir, chase_dest);
+		VectorMA(trace.endpos, -6.0f, dir, chase_dest);
 	}
 	else {
 		VectorCopy(desired, chase_dest);
 	}
+	// force first person if camera view is blocked or too close
+	/*
 	vec3_t cam_delta;
 	VectorSubtract(chase_dest, player_org, cam_delta);
 	float cam_dist = VectorLength(cam_delta);
 
 	trace_t los = TraceLine(chase_dest, player_org);
 
-	// force first person if camera view is blocked or too close
 	if ((los.fraction < 1.0f || cam_dist < 8) && player_alpha < 0.05)
 	{
 		chase_forcefirstperson = true;
@@ -171,6 +175,7 @@ void Chase_Update(void)
 		VectorCopy(cl.viewangles, r_refdef.viewangles);
 		return;
 	}
+	*/
 
 	// check if we hit something: if so, back off slightly to avoid clipping into the wall
 	if (trace.fraction < 1.0f) {
@@ -199,7 +204,6 @@ void Chase_Update(void)
 		partial = 0.95f;
 	chase_lasttime = cl.time;
 
-	vec3_t old;
 	VectorCopy(chase_pos, old);
 	for (i = 0; i < 3; i++)
 		chase_pos[i] = old[i] + partial * (chase_dest[i] - old[i]);
@@ -209,6 +213,24 @@ void Chase_Update(void)
 		chase_pos[2] = smoothed_player_z + 8;
 	if (chase_pos[2] > smoothed_player_z + 48)
 		chase_pos[2] = smoothed_player_z + 48;
+
+	// final collision check for interpolated and laundered position
+	final_trace = TraceLine(player_org, chase_pos);
+	if (final_trace.fraction < 1.0f) {
+		vec3_t final_dir;
+
+		VectorCopy(final_trace.endpos, chase_pos);
+
+		// back off slightly from the wall
+		VectorSubtract(chase_pos, player_org, final_dir);
+		float final_dist = VectorLength(final_dir);
+		if (final_dist > 2.0f) {
+			VectorNormalize(final_dir);
+			VectorMA(chase_pos, -2.0f, final_dir, chase_pos);
+		} else {
+			VectorCopy(player_org, chase_pos);
+		}
+	}
 
 	// set view origin to smoothed position
 	VectorCopy(chase_pos, r_refdef.vieworg);
@@ -239,9 +261,9 @@ void Chase_Update(void)
 	r_refdef.viewangles[ROLL]  = 0;
 	*/
 
-	float angle_lerp = 0.15f;
-	float yaw_delta = AngleNormalize(r_refdef.viewangles[YAW] - smoothed_angles[YAW]);
-	float pitch_delta = AngleNormalize(r_refdef.viewangles[PITCH] - smoothed_angles[PITCH]);
+	angle_lerp = 0.15f;
+	yaw_delta = AngleNormalize(r_refdef.viewangles[YAW] - smoothed_angles[YAW]);
+	pitch_delta = AngleNormalize(r_refdef.viewangles[PITCH] - smoothed_angles[PITCH]);
 
 	// deadzone to stop micro jitter
 	if (fabs(yaw_delta) < 0.2f) yaw_delta = 0;
