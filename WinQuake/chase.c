@@ -66,12 +66,56 @@ void Chase_Reset (void)
 
 trace_t TraceLine (vec3_t start, vec3_t end)
 {
-	trace_t	trace;
+	trace_t		trace;
+	int			i;
+	entity_t*	ent;
+	model_t*	model;
+	trace_t		ent_trace;
+	vec3_t		start_l, end_l;
+	hull_t*		hull;
 
 	memset (&trace, 0, sizeof(trace));
 	trace.fraction = 1.0f;
 	VectorCopy(end, trace.endpos);
 	SV_RecursiveHullCheck (cl.worldmodel->hulls, 0, 0, 1, start, end, &trace);
+
+	// trace against all client-side brush entities (doors, buttons, platforms, etc.)
+	for (i = 1; i < cl.num_entities; i++)
+	{
+		ent = &cl_entities[i];
+		model = ent->model;
+
+		if (!model || model->type != mod_brush)
+			continue;
+
+		// skip the world model itself (submodel 0)
+		if (model == cl.worldmodel)
+			continue;
+
+		hull = &model->hulls[0];  // point-sized hull for ray trace
+
+		// transform trace into entity's local space
+		VectorSubtract (start, ent->origin, start_l);
+		VectorSubtract (end, ent->origin, end_l);
+
+		memset (&ent_trace, 0, sizeof(ent_trace));
+		ent_trace.fraction = 1.0f;
+		VectorCopy (end, ent_trace.endpos);
+
+		SV_RecursiveHullCheck (hull, hull->firstclipnode, 0, 1, start_l, end_l, &ent_trace);
+
+		// fix up endpos back to world space
+		if (ent_trace.fraction < 1.0f)
+		{
+			VectorAdd (ent_trace.endpos, ent->origin, ent_trace.endpos);
+		}
+
+		// keep the closer hit
+		if (ent_trace.fraction < trace.fraction)
+		{
+			trace = ent_trace;
+		}
+	}
 
 	return trace;
 }
