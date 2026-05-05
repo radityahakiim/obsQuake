@@ -550,7 +550,7 @@ void R_DrawEntitiesOnList (void)
 
 		if (currententity == &cl_entities[cl.viewentity])
 		{
-			if (!(chase_active.value && !chase_forcefirstperson))
+			if (!chase_active.value)
 				continue; // dont draw player on first person
 		}
 
@@ -629,7 +629,7 @@ void R_DrawViewModel (void)
 	if (!r_drawviewmodel.value)
 		return;
 
-	if (chase_active.value && !chase_forcefirstperson)
+	if (chase_active.value)
 		return;
 
 	if (cl.items & IT_INVISIBILITY)

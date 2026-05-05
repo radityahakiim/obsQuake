@@ -22,9 +22,10 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "quakedef.h"
 
 cvar_t	chase_back = {"chase_back", "100"};
-cvar_t	chase_up = {"chase_up", "16"};
+cvar_t	chase_up = {"chase_up", "32"};
 cvar_t	chase_right = {"chase_right", "0"};
 cvar_t	chase_active = {"chase_active", "0"};
+cvar_t	chase_orbit = {"chase_orbit", "1"};
 
 vec3_t	chase_pos;
 vec3_t	chase_angles;
@@ -39,8 +40,9 @@ float	chase_lastactive;
 
 float		player_alpha; // from render main (gl_rmain.c for glquake)
 
-float	smoothed_player_z;
-qboolean chase_forcefirstperson = false;
+float	smoothed_player_z = 0.0f;
+// qboolean chase_forcefirstperson = false;
+float	chase_smoothed_dist;
 
 qboolean SV_RecursiveHullCheck(hull_t* hull, int num, float p1f, float p2f, vec3_t p1, vec3_t p2, trace_t* trace);
 
@@ -51,8 +53,9 @@ void Chase_Init (void)
 	Cvar_RegisterVariable (&chase_up);
 	Cvar_RegisterVariable (&chase_right);
 	Cvar_RegisterVariable (&chase_active);
+	Cvar_RegisterVariable (&chase_orbit);
 	chase_lastactive = -1;
-	smoothed_player_z = 0.0f;
+	chase_smoothed_dist = 1024.0f;
 }
 
 void Chase_Reset (void)
@@ -178,7 +181,18 @@ void Chase_Update(void)
 		chase_dest[i] = player_org[i]
 		- forward[i] * chase_back.value
 		- right[i] * chase_right.value;
-	chase_dest[2] = player_org[2] + chase_up.value;
+
+	if (chase_orbit.value)
+	{
+		// in orbital mode, we use the Z component from the view vector,
+		// but we still add chase_up as a vertical bias (camera height).
+		chase_dest[2] += chase_up.value;
+	}
+	else
+	{
+		// fixed vertical offset
+		chase_dest[2] = player_org[2] + chase_up.value;
+	}
 
 	// add collision detection: trace from player to desired camera pos and clip if necessary
 	VectorCopy(chase_dest, desired);
@@ -221,7 +235,8 @@ void Chase_Update(void)
 	}
 	*/
 
-	// check if we hit something: if so, back off slightly to avoid clipping into the wall
+	// check if we hit something
+	// if so, back off slightly to avoid clipping into the wall
 	if (trace.fraction < 1.0f) {
 		vec3_t delta;
 		VectorSubtract(chase_dest, player_org, delta);
@@ -243,9 +258,13 @@ void Chase_Update(void)
 	}
 
 	// smooth interpolation towards chase_dest
-	float partial = 0.8f;
+	// use host_frametime for framerate-independent smoothing
+	float speed = 15.0f;
+	float partial = 1.0f - expf(-speed * host_frametime);
+
+	// if it's been too long, just snap
 	if (cl.time - chase_lasttime > 0.2f)
-		partial = 0.95f;
+		partial = 1.0f;
 	chase_lasttime = cl.time;
 
 	VectorCopy(chase_pos, old);
@@ -253,10 +272,21 @@ void Chase_Update(void)
 		chase_pos[i] = old[i] + partial * (chase_dest[i] - old[i]);
 
 	// launder death/jump height using smoothed z
-	if (chase_pos[2] < smoothed_player_z + 8)
-		chase_pos[2] = smoothed_player_z + 8;
-	if (chase_pos[2] > smoothed_player_z + 48)
-		chase_pos[2] = smoothed_player_z + 48;
+	if (chase_orbit.value)
+	{
+		// relaxed constraints for orbital movement
+		if (chase_pos[2] < smoothed_player_z - 64)
+			chase_pos[2] = smoothed_player_z - 64;
+		if (chase_pos[2] > smoothed_player_z + 160)
+			chase_pos[2] = smoothed_player_z + 160;
+	}
+	else
+	{
+		if (chase_pos[2] < smoothed_player_z + 8)
+			chase_pos[2] = smoothed_player_z + 8;
+		if (chase_pos[2] > smoothed_player_z + 48)
+			chase_pos[2] = smoothed_player_z + 48;
+	}
 
 	// final collision check for interpolated and laundered position
 	final_trace = TraceLine(player_org, chase_pos);
@@ -279,41 +309,64 @@ void Chase_Update(void)
 	// set view origin to smoothed position
 	VectorCopy(chase_pos, r_refdef.vieworg);
 
-	// use player view angles directly
-	// vec3_t desired_angles;
-	// VectorCopy(cl.viewangles, desired_angles);
+	// calculate desired angles
+	vec3_t desired_angles;
+	VectorCopy(cl.viewangles, desired_angles);
 
-	// find the spot the player is looking at
-	/*
-	VectorMA (virtual_player_org, 4096, forward, dest);
-	trace_t aim_trace = TraceLine(virtual_player_org, dest);
-	VectorCopy(aim_trace.endpos, stop);
+	if (chase_orbit.value)
+	{
+		vec3_t impact_point, aim_dir;
+		trace_t aim_trace;
 
-	// calculate pitch to look at the same spot from camera
-	vec3_t lookdir;
-	VectorSubtract (stop, r_refdef.vieworg, lookdir);
-	dist = VectorLength (lookdir);
-	if (dist < 1)
-		dist = 1;
+		// find where the player is actually looking
+		VectorMA(player_org, 8192, forward, impact_point);
+		aim_trace = TraceLine(player_org, impact_point);
+		
+		float impact_dist = aim_trace.fraction * 8192.0f;
 
-	float horiz = sqrt(lookdir[0] * lookdir[0] + lookdir[1] * lookdir[1]);
-	if (horiz < 0.0001f)
-		horiz = 0.0001f;
+		// heavily smooth the impact distance to keep the camera steady.
+		// this prevents the camera from jumping when aiming past edges.
+		float dist_lerp = 1.0f - expf(-3.0f * host_frametime);
+		chase_smoothed_dist += (impact_dist - chase_smoothed_dist) * dist_lerp;
 
-	r_refdef.viewangles[YAW]   = atan2(lookdir[1], lookdir[0]) * 180 / M_PI;
-	r_refdef.viewangles[PITCH] = -atan(lookdir[2] / horiz) * 180 / M_PI;
-	r_refdef.viewangles[ROLL]  = 0;
-	*/
+		// use the smoothed distance to project a steady focus point
+		VectorMA(player_org, chase_smoothed_dist, forward, impact_point);
 
-	angle_lerp = 0.15f;
-	yaw_delta = AngleNormalize(r_refdef.viewangles[YAW] - smoothed_angles[YAW]);
-	pitch_delta = AngleNormalize(r_refdef.viewangles[PITCH] - smoothed_angles[PITCH]);
+		// calculate angles from camera to that impact point
+		VectorSubtract(impact_point, r_refdef.vieworg, aim_dir);
+		float cam_dist = VectorLength(aim_dir);
+
+		if (cam_dist > 1.0f)
+		{
+			float horiz = sqrtf(aim_dir[0] * aim_dir[0] + aim_dir[1] * aim_dir[1]);
+			if (horiz < 0.001f) horiz = 0.001f;
+
+			float corr_yaw = atan2f(aim_dir[1], aim_dir[0]) * 180.0f / M_PI;
+			float corr_pitch = -atan2f(aim_dir[2], horiz) * 180.0f / M_PI;
+
+			// avoid wobble snapping near walls.
+			float blend = 1.0f;
+			if (chase_smoothed_dist < 256.0f)
+			{
+				blend = (chase_smoothed_dist - 64.0f) / 192.0f;
+				if (blend < 0) blend = 0;
+			}
+
+			desired_angles[YAW] = cl.viewangles[YAW] + AngleNormalize(corr_yaw - cl.viewangles[YAW]) * blend;
+			desired_angles[PITCH] = cl.viewangles[PITCH] + AngleNormalize(corr_pitch - cl.viewangles[PITCH]) * blend;
+		}
+	}
+
+	// framerate independent angle smoothing
+	angle_lerp = 1.0f - expf(-20.0f * host_frametime);
+	yaw_delta = AngleNormalize(desired_angles[YAW] - smoothed_angles[YAW]);
+	pitch_delta = AngleNormalize(desired_angles[PITCH] - smoothed_angles[PITCH]);
 
 	// deadzone to stop micro jitter
-	if (fabs(yaw_delta) < 0.2f) yaw_delta = 0;
-	if (fabs(pitch_delta) < 0.2f) pitch_delta = 0;
+	if (fabs(yaw_delta) < 0.05f) yaw_delta = 0;
+	if (fabs(pitch_delta) < 0.05f) pitch_delta = 0;
 
-	smoothed_angles[YAW]   += yaw_delta * angle_lerp;
+	smoothed_angles[YAW] += yaw_delta * angle_lerp;
 	smoothed_angles[PITCH] += pitch_delta * angle_lerp;
 	smoothed_angles[ROLL] = 0;
 
