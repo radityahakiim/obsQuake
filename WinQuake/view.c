@@ -870,7 +870,15 @@ void V_CalcRefdef (void)
 // model origin for the view
 	ent->angles[YAW] = cl.viewangles[YAW];	// the model should face
 										// the view dir
-	ent->angles[PITCH] = -cl.viewangles[PITCH];	// the model should face
+	if (chase_active.value)
+	{
+		float p = -cl.viewangles[PITCH];
+		if (p > 35) p = 35;
+		if (p < -15) p = -15;
+		ent->angles[PITCH] = p;
+	}
+	else
+		ent->angles[PITCH] = -cl.viewangles[PITCH];	// the model should face
 										// the view dir
 										
 	

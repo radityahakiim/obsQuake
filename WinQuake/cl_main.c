@@ -607,6 +607,12 @@ void CL_RelinkEntities (void)
 
 		ent->forcelink = false;
 
+		if (i == cl.viewentity && chase_active.value)
+		{
+			if (ent->angles[PITCH] > 35) ent->angles[PITCH] = 35;
+			if (ent->angles[PITCH] < -15) ent->angles[PITCH] = -15;
+		}
+
 		if (i == cl.viewentity && !chase_active.value)
 			continue;
 
