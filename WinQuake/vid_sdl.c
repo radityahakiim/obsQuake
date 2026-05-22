@@ -208,11 +208,20 @@ static const char* fragment_shader_src =
 
 static void VID_InitOpenGL(int width, int height)
 {
-	unsigned int vs = glCreateShader(GL_VERTEX_SHADER);
+	unsigned int vs, fs;
+	float vertices[] = {
+		// pos      // tex
+		-1.0f,  1.0f, 0.0f, 0.0f,
+		 1.0f,  1.0f, 1.0f, 0.0f,
+		-1.0f, -1.0f, 0.0f, 1.0f,
+		 1.0f, -1.0f, 1.0f, 1.0f
+	};
+
+	vs = glCreateShader(GL_VERTEX_SHADER);
 	glShaderSource(vs, 1, &vertex_shader_src, NULL);
 	glCompileShader(vs);
 
-	unsigned int fs = glCreateShader(GL_FRAGMENT_SHADER);
+	fs = glCreateShader(GL_FRAGMENT_SHADER);
 	glShaderSource(fs, 1, &fragment_shader_src, NULL);
 	glCompileShader(fs);
 
@@ -239,14 +248,6 @@ static void VID_InitOpenGL(int width, int height)
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, width, height, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, NULL);
-
-	float vertices[] = {
-		// pos      // tex
-		-1.0f,  1.0f, 0.0f, 0.0f,
-		 1.0f,  1.0f, 1.0f, 0.0f,
-		-1.0f, -1.0f, 0.0f, 1.0f,
-		 1.0f, -1.0f, 1.0f, 1.0f
-	};
 
 	glGenBuffers(1, &gl_vbo);
 	glBindBuffer(GL_ARRAY_BUFFER, gl_vbo);
@@ -279,12 +280,15 @@ static void VID_ShutdownOpenGL()
 
 static qboolean VID_CheckGLSupport(void)
 {
+	SDL_Window* temp_window;
+	SDL_GLContext temp_ctx;
+
 	// opengl 2.0 request
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_COMPATIBILITY);
 
-	SDL_Window* temp_window = SDL_CreateWindow(
+	temp_window = SDL_CreateWindow(
 		"gl check",
 		SDL_WINDOWPOS_UNDEFINED,
 		SDL_WINDOWPOS_UNDEFINED,
@@ -295,7 +299,7 @@ static qboolean VID_CheckGLSupport(void)
 	if (!temp_window)
 		return false;
 
-	SDL_GLContext temp_ctx = SDL_GL_CreateContext(temp_window);
+	temp_ctx = SDL_GL_CreateContext(temp_window);
 	if (!temp_ctx) {
 		SDL_DestroyWindow(temp_window);
 		return false;
@@ -346,22 +350,27 @@ VID_CollectRefreshRates
 */
 static void VID_CollectRefreshRates(int width, int height)
 {
-	int display_index = SDL_GetWindowDisplayIndex(window);
+	int display_index;
+	int count;
+	SDL_DisplayMode mode;
+	int i, j, temp, current_rate;
+	qboolean found;
+
+	display_index = SDL_GetWindowDisplayIndex(window);
 	if (display_index < 0) display_index = 0;
 
 	vid_num_refresh = 0;
-	int count = SDL_GetNumDisplayModes(display_index);
-	SDL_DisplayMode mode;
+	count = SDL_GetNumDisplayModes(display_index);
 
 	// always add 60Hz as a safe default
 	vid_refresh_rates[vid_num_refresh++] = 60;
 
-	for (int i = 0; i < count && vid_num_refresh < 32; i++) {
+	for (i = 0; i < count && vid_num_refresh < 32; i++) {
 		if (SDL_GetDisplayMode(display_index, i, &mode) == 0) {
 			if (mode.w == width && mode.h == height && mode.refresh_rate > 0) {
 				// check duplicates
-				qboolean found = false;
-				for (int j = 0; j < vid_num_refresh; j++) {
+				found = false;
+				for (j = 0; j < vid_num_refresh; j++) {
 					if (vid_refresh_rates[j] == mode.refresh_rate) {
 						found = true;
 						break;
@@ -375,10 +384,10 @@ static void VID_CollectRefreshRates(int width, int height)
 	}
 
 	// sort
-	for (int i = 0; i < vid_num_refresh - 1; i++) {
-		for (int j = i + 1; j < vid_num_refresh; j++) {
+	for (i = 0; i < vid_num_refresh - 1; i++) {
+		for (j = i + 1; j < vid_num_refresh; j++) {
 			if (vid_refresh_rates[i] > vid_refresh_rates[j]) {
-				int temp = vid_refresh_rates[i];
+				temp = vid_refresh_rates[i];
 				vid_refresh_rates[i] = vid_refresh_rates[j];
 				vid_refresh_rates[j] = temp;
 			}
@@ -387,10 +396,10 @@ static void VID_CollectRefreshRates(int width, int height)
 
 	// find current refresh rate index
 	vid_refresh_index = 0;
-	int current_rate = (int)vid_refreshrate.value;
+	current_rate = (int)vid_refreshrate.value;
 	if (current_rate == 0) current_rate = 60;
 
-	for (int i = 0; i < vid_num_refresh; i++) {
+	for (i = 0; i < vid_num_refresh; i++) {
 		if (vid_refresh_rates[i] == current_rate) {
 			vid_refresh_index = i;
 			break;
@@ -485,11 +494,13 @@ void VID_RememberWindowPos (void)
 	if (window)
 	{
 		SDL_Rect rect;
+		int display_idx;
+		SDL_Rect displayBounds;
+
 		SDL_GetWindowPosition(window, &rect.x, &rect.y);
 		SDL_GetWindowSize(window, &rect.w, &rect.h);
 
-		int display_idx = SDL_GetWindowDisplayIndex(window);
-		SDL_Rect displayBounds;
+		display_idx = SDL_GetWindowDisplayIndex(window);
 
 		if (display_idx >= 0 &&
 			SDL_GetDisplayBounds(display_idx, &displayBounds) == 0) {
@@ -635,19 +646,23 @@ qboolean VID_AllocBuffers (int width, int height)
 }
 
 void VID_InitModes(void) {
-	nummodes = 0;
 	SDL_DisplayMode desktop_mode, mode;
 	int display = 0; // primary display
 	int lowres[][2] = { {320,200},{320,240},{400,300},{512,384} };
 	vmode_t tmp;
+	int win_width, win_height;
+	int k, w, h, j, i, num_modes, bpp;
+	qboolean dup, duplicate;
+
+	nummodes = 0;
 
 	if (SDL_GetDesktopDisplayMode(display, &desktop_mode) != 0) {
 		desktop_mode.w = 640; desktop_mode.h = 480;
 	}
 
 	// get desktop mode for reference
-	int win_width = desktop_mode.w * 0.8;
-	int win_height = desktop_mode.h * 0.8;
+	win_width = desktop_mode.w * 0.8;
+	win_height = desktop_mode.h * 0.8;
 	if (win_width < 640) win_width = 640;
 	if (win_height < 480) win_height = 480;
 	if (win_width > desktop_mode.w) win_width = desktop_mode.w;
@@ -665,10 +680,10 @@ void VID_InitModes(void) {
 	modelist[nummodes].bpp = SDL_BITSPERPIXEL(desktop_mode.format);
 	nummodes++;
 
-	for (int k = 0; k < 4; k++) {
-		int w = lowres[k][0], h = lowres[k][1];
-		qboolean dup = false;
-		for (int j = 0; j < nummodes; j++)
+	for (k = 0; k < 4; k++) {
+		w = lowres[k][0]; h = lowres[k][1];
+		dup = false;
+		for (j = 0; j < nummodes; j++)
 			if (modelist[j].width == w && modelist[j].height == h) { dup = true; break; }
 		if (!dup && w <= desktop_mode.w && h <= desktop_mode.h) {
 			modelist[nummodes].type = MS_WINDOWED;
@@ -686,15 +701,15 @@ void VID_InitModes(void) {
 	}
 
 	// enumerate fullscreen modes
-	int num_modes = SDL_GetNumDisplayModes(display);
-	for (int i = 0; i < num_modes && nummodes < MAX_MODE_LIST; i++) {
+	num_modes = SDL_GetNumDisplayModes(display);
+	for (i = 0; i < num_modes && nummodes < MAX_MODE_LIST; i++) {
 		if (SDL_GetDisplayMode(display, i, &mode) == 0) {
-			int bpp = SDL_BITSPERPIXEL(mode.format);
+			bpp = SDL_BITSPERPIXEL(mode.format);
 			if (bpp >= 8 && mode.w >= 320 && mode.h >= 200 && mode.w <= MAXWIDTH && mode.h <= MAXHEIGHT)
 			{
 				// check for duplicates
-				qboolean duplicate = false;
-				for (int j = 0; j < nummodes; j++) {
+				duplicate = false;
+				for (j = 0; j < nummodes; j++) {
 					if (modelist[j].width == mode.w && modelist[j].height == mode.h) {
 						duplicate = true;
 						break;
@@ -730,8 +745,8 @@ void VID_InitModes(void) {
 		nummodes++;
 	}
 
-	for (int i = 0; i < nummodes - 1; i++)
-		for (int j = i + 1; j < nummodes; j++)
+	for (i = 0; i < nummodes - 1; i++)
+		for (j = i + 1; j < nummodes; j++)
 			if (modelist[i].width > modelist[j].width ||
 				(modelist[i].width == modelist[j].width && modelist[i].height > modelist[j].height)) {
 				tmp = modelist[i];
@@ -745,6 +760,9 @@ qboolean VID_SetWindowedMode(int modenum)
 	int targ_winternal;
 	int targ_hinternal;
 	int scale;
+	Uint32 flags;
+	int posx;
+	int posy;
 
 	VID_ShutdownOpenGL();
 	if (quake_surface) { SDL_FreeSurface(quake_surface); quake_surface = NULL; }
@@ -752,13 +770,13 @@ qboolean VID_SetWindowedMode(int modenum)
 	if (quake_surface32) { SDL_FreeSurface(quake_surface32); quake_surface32 = NULL; }
 	if (window) { SDL_DestroyWindow(window); window = NULL; }
 
-	Uint32 flags = SDL_WINDOW_SHOWN;
+	flags = SDL_WINDOW_SHOWN;
 	if (gl_supported && vid_renderer.value != 0)
 		flags |= SDL_WINDOW_OPENGL;
 
 	// center automatically
-	int posx = SDL_WINDOWPOS_CENTERED;
-	int posy = SDL_WINDOWPOS_CENTERED;
+	posx = SDL_WINDOWPOS_CENTERED;
+	posy = SDL_WINDOWPOS_CENTERED;
 
 	targ_winternal = modelist[modenum].width;
 	targ_hinternal = modelist[modenum].height;
@@ -856,6 +874,8 @@ qboolean VID_SetFullscreenMode (int modenum)
 	int targ_winternal;
 	int targ_hinternal;
 	int scale;
+	Uint32 flags;
+	SDL_DisplayMode dm;
 
 	VID_ShutdownOpenGL();
 	if (quake_surface) { SDL_FreeSurface(quake_surface); quake_surface = NULL; }
@@ -863,7 +883,7 @@ qboolean VID_SetFullscreenMode (int modenum)
 	if (window) { SDL_DestroyWindow(window); window = NULL; }
 	if (quake_surface32) { SDL_FreeSurface(quake_surface32); quake_surface32 = NULL; }
 
-	Uint32 flags = SDL_WINDOW_SHOWN;
+	flags = SDL_WINDOW_SHOWN;
 		if (gl_supported && vid_renderer.value != 0)
 			flags |= SDL_WINDOW_OPENGL;
 
@@ -902,7 +922,6 @@ qboolean VID_SetFullscreenMode (int modenum)
 		Sys_Error("SDL_CreateWindow failed: %s", SDL_GetError());
 	}
 
-	SDL_DisplayMode dm;
 	SDL_GetWindowDisplayMode(window, &dm);
 	dm.w = modelist[modenum].width;
 	dm.h = modelist[modenum].height;
@@ -1309,12 +1328,13 @@ void VID_ForceLockState (int lk)
 void	VID_SetPalette (unsigned char *palette)
 {
 	SDL_Color colors[256];
+	int i;
 
 	if (!Minimized)
 	{
 		palette_changed = true;
 
-		for (int i = 0; i < 256; i++) {
+		for (i = 0; i < 256; i++) {
 			colors[i].r = palette[i * 3];
 			colors[i].g = palette[i * 3 + 1];
 			colors[i].b = palette[i * 3 + 2];
@@ -1334,12 +1354,12 @@ void	VID_SetPalette (unsigned char *palette)
 
 		if (gamma != cached_gamma) {
 			cached_gamma = gamma;
-			for (int i = 0; i < 256; i++) {
+			for (i = 0; i < 256; i++) {
 				gamma_lut[i] = (unsigned char)(pow(i / 255.0f, gamma) * 255.0f);
 			}
 		}
 
-		for (int i = 0; i < 256; i++) {
+		for (i = 0; i < 256; i++) {
 			pal32[i * 4 + 0] = gamma_lut[palette[i * 3]];
 			pal32[i * 4 + 1] = gamma_lut[palette[i * 3 + 1]];
 			pal32[i * 4 + 2] = gamma_lut[palette[i * 3 + 2]];
@@ -1529,6 +1549,12 @@ void	VID_Init (unsigned char *palette)
 	int		i, bestmatch, bestmatchmetric, t, dr, dg, db;
 	int		basenummodes;
 	byte	*ptmp;
+	int saved_w;
+	int saved_h;
+	int target_modenum;
+	qboolean found;
+	int max_area, area, refresh;
+	SDL_DisplayMode dm;
 
 	Cvar_RegisterVariable (&vid_mode);
 	Cvar_RegisterVariable (&vid_wait);
@@ -1594,13 +1620,13 @@ void	VID_Init (unsigned char *palette)
 	}
 
 // find saved resolution
-	int saved_w = (int)vid_config_x.value;
-	int saved_h = (int)vid_config_y.value;
-	int target_modenum = 0;                    // fallback = smallest mode
-	qboolean found = false;
+	saved_w = (int)vid_config_x.value;
+	saved_h = (int)vid_config_y.value;
+	target_modenum = 0;                    // fallback = smallest mode
+	found = false;
 
 	if (saved_w >= 320 && saved_h >= 200) {
-		for (int i = 0; i < nummodes; i++) {
+		for (i = 0; i < nummodes; i++) {
 			if (modelist[i].width == saved_w && modelist[i].height == saved_h) {
 				target_modenum = i;
 				found = true;
@@ -1610,9 +1636,9 @@ void	VID_Init (unsigned char *palette)
 	}
 	if (!found) {
 		// fallback to largest mode and update the saved cvars
-		int max_area = 0;
-		for (int i = 0; i < nummodes; i++) {
-			int area = modelist[i].width * modelist[i].height;
+		max_area = 0;
+		for (i = 0; i < nummodes; i++) {
+			area = modelist[i].width * modelist[i].height;
 			if (area > max_area) {
 				max_area = area;
 				target_modenum = i;
@@ -1624,9 +1650,8 @@ void	VID_Init (unsigned char *palette)
 
 	// init vid_refreshrate only if it was never saved
 	if ((int)vid_refreshrate.value <= 0) {
-		int refresh = 60;
+		refresh = 60;
 		if (window) {
-			SDL_DisplayMode dm;
 			if (SDL_GetWindowDisplayMode(window, &dm) == 0 && dm.refresh_rate > 0)
 				refresh = dm.refresh_rate;
 		}
@@ -1705,16 +1730,25 @@ void	VID_Update(vrect_t* rects)
 
 	if (startup_count < 60)
 	{
+		int saved_fs;
+		int saved_vsync;
+		int saved_refresh;
+		qboolean need_reapply;
+		int saved_w;
+		int saved_h;
+		qboolean should_be_gl;
+		qboolean is_currently_gl;
+
 		startup_count++;
 
-		int saved_fs = (int)vid_fullscreen_mode.value;
-		int saved_vsync = (int)vid_vsync.value;
-		int saved_refresh = (int)vid_refreshrate.value;
+		saved_fs = (int)vid_fullscreen_mode.value;
+		saved_vsync = (int)vid_vsync.value;
+		saved_refresh = (int)vid_refreshrate.value;
 
-		qboolean need_reapply = false;
+		need_reapply = false;
 
-		int saved_w = (int)vid_config_x.value;
-		int saved_h = (int)vid_config_y.value;
+		saved_w = (int)vid_config_x.value;
+		saved_h = (int)vid_config_y.value;
 
 		if (saved_w > 0 && saved_h > 0 &&
 			(modelist[vid_modenum].width != saved_w || modelist[vid_modenum].height != saved_h))
@@ -1725,8 +1759,8 @@ void	VID_Update(vrect_t* rects)
 		if (saved_fs == 0 && modestate != MS_WINDOWED)
 			need_reapply = true;
 
-		qboolean should_be_gl = gl_supported && ((int)vid_renderer.value == 1);
-		qboolean is_currently_gl = (gl_context != NULL);
+		should_be_gl = gl_supported && ((int)vid_renderer.value == 1);
+		is_currently_gl = (gl_context != NULL);
 		if (should_be_gl != is_currently_gl)
 			need_reapply = true;
 
@@ -1766,15 +1800,17 @@ void	VID_Update(vrect_t* rects)
 		if (screen_surface)
 		{
 			float gamma = v_gamma.value;
+			int i;
+			SDL_Color colors[256];
+
 			if (gamma != cached_gamma)
 			{
 				cached_gamma = gamma;
-				for (int i = 0; i < 256; i++)
+				for (i = 0; i < 256; i++)
 					gamma_lut[i] = (unsigned char)(pow(i / 255.0f, gamma) * 255.0f);
 			}
 
-			SDL_Color colors[256];
-			for (int i = 0; i < 256; i++)
+			for (i = 0; i < 256; i++)
 			{
 				colors[i].r = gamma_lut[vid_curpal[i * 3]];
 				colors[i].g = gamma_lut[vid_curpal[i * 3 + 1]];
@@ -1793,6 +1829,10 @@ void	VID_Update(vrect_t* rects)
 	}
 	else
 	{
+		int targ_winternal;
+		int targ_hinternal;
+		int draw_w, draw_h;
+
 		// OpenGL path
 		if (!gl_context || !gl_texture)
 			return;
@@ -1801,10 +1841,9 @@ void	VID_Update(vrect_t* rects)
 		glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 		glClear(GL_COLOR_BUFFER_BIT);
 
-		int targ_winternal = quake_surface->w;
-		int targ_hinternal = quake_surface->h;
+		targ_winternal = quake_surface->w;
+		targ_hinternal = quake_surface->h;
 
-		int draw_w, draw_h;
 		SDL_GL_GetDrawableSize(window, &draw_w, &draw_h);
 
 		glBindTexture(GL_TEXTURE_2D, gl_texture);
@@ -2169,6 +2208,7 @@ void VID_ApplyChanges(qboolean permanent)
 	float old_refresh;
 	float old_renderer;
 	int renderer;
+	int i;
 
 	if (vid_test_active && !permanent) {
 		// revert test
@@ -2207,7 +2247,7 @@ void VID_ApplyChanges(qboolean permanent)
 		VID_CollectRefreshRates(w, h);
 
 		vid_refresh_index = 0;
-		for (int i = 0; i < vid_num_refresh; i++) {
+		for (i = 0; i < vid_num_refresh; i++) {
 			if (vid_refresh_rates[i] == refresh) {
 				vid_refresh_index = i;
 				break;
@@ -2300,6 +2340,8 @@ void VID_ApplyChanges(qboolean permanent)
 	}
 }
 
+static qboolean was_entered = true;
+
 /*
 ================
 VID_MenuDraw
@@ -2317,13 +2359,17 @@ void VID_MenuDraw(void)
 	const int x_label = 16;
 	const int x_value = 220;
 	const int x_cursor = 200;
+	int cur_refresh;
+	const char* fs_str[] = { "Off", "Borderless", "On" }; // fullscreen modes
+	int fs_val;
+	float rend_scale;
+	int remain;
 
 	p = Draw_CachePic("gfx/vidmodes.lmp");
 	M_DrawPic((320 - p->width) / 2, 4, p);
 
 	// store originals on first entry
-	static qboolean first_entry = true;
-	if (first_entry) {
+	if (was_entered) {
 		prev_renderer = (int)vid_renderer.value;
 
 		if (prev_renderer != 0 && prev_renderer != 1)
@@ -2352,7 +2398,7 @@ void VID_MenuDraw(void)
 		if (vid_menu_render_scale > 150) vid_menu_render_scale = 150;
 		prev_render_scale = vid_menu_render_scale;
 
-		first_entry = false;
+		was_entered = false;
 
 		// find current mode index
 		for (vid_current_mode = 0; vid_current_mode < lnummodes; vid_current_mode++) {
@@ -2376,7 +2422,7 @@ void VID_MenuDraw(void)
 	y += 8;
 
 	M_Print(x_label, y, "        Refresh Rate");
-	int cur_refresh = (vid_num_refresh > 0) ? vid_refresh_rates[vid_refresh_index] : 60;
+	cur_refresh = (vid_num_refresh > 0) ? vid_refresh_rates[vid_refresh_index] : 60;
 	sprintf(temp, "%d Hz", cur_refresh);
 	M_Print(x_value, y, temp);
 	if (vid_menuline == 1) M_DrawCharacter(x_cursor, y, 12 + ((int)(realtime * 4) & 1));
@@ -2389,8 +2435,7 @@ void VID_MenuDraw(void)
 	y += 8;
 
 	M_Print(x_label, y,"          Fullscreen");
-	const char* fs_str[] = { "Off", "Borderless", "On" };
-	int fs_val = vid_menu_fullscreen;
+	fs_val = vid_menu_fullscreen;
 	if (fs_val < 0) fs_val = 0;
 	if (fs_val > 2) fs_val = 2;
 	sprintf(temp, "%s", fs_str[fs_val]);
@@ -2405,8 +2450,8 @@ void VID_MenuDraw(void)
 	y += 8;
 
 	M_Print(x_label, y, "        Render Scale");
-	float r = (vid_menu_render_scale - 50) / 100.0;
-	M_DrawSlider(x_value, y, r);
+	rend_scale = (vid_menu_render_scale - 50) / 100.0;
+	M_DrawSlider(x_value, y, rend_scale);
 	sprintf(temp, "%d%%", vid_menu_render_scale);
 	M_Print(x_value + 12 * 8, y, temp);
 	if (vid_menuline == 5) M_DrawCharacter(x_cursor, y, 12 + ((int)(realtime * 4) & 1));
@@ -2421,7 +2466,7 @@ void VID_MenuDraw(void)
 	y += 16;
 
 	if (vid_test_active) {
-		int remain = (int)(vid_test_duration - (realtime - vid_test_start));
+		remain = (int)(vid_test_duration - (realtime - vid_test_start));
 		sprintf(temp, "Test active: %d sec remaining", remain);
 		M_Print(x_label, y, temp);
 	}
@@ -2443,6 +2488,7 @@ void VID_MenuKey(int key)
 	{
 	case K_ESCAPE:
 		S_LocalSound("misc/menu1.wav");
+		was_entered = true;
 		M_Menu_Options_f();
 		break;
 	case K_LEFTARROW:
